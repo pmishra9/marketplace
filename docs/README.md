@@ -8,6 +8,7 @@
 
 | Document | Topic | Description |
 |---|---|---|
+| [Storefront Specifications](file:///Users/rabi/dev/marketplace/docs/specs.md) | Feature Requirements | Storefront functional specs: search, sorting, PDP, variants, auth, and checkout flow |
 | [Getting Started](file:///Users/rabi/dev/marketplace/docs/getting-started.md) | Setup & Installation | Prerequisites, dependency install, running dev servers, port mapping, and build steps |
 | [Architecture & Topology](file:///Users/rabi/dev/marketplace/docs/architecture.md) | System Design | High-level data flow diagram, service interactions, and tech stack rationale |
 | [Backend REST API](file:///Users/rabi/dev/marketplace/docs/api.md) | API Specifications | Endpoints, query parameters, payloads, and response contracts for products & orders |

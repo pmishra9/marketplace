@@ -4,6 +4,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import productRoutes from './routes/productRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.get('/api/health', (_req, res) => {
 // API Routes
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/auth', authRoutes);
 
 // Root fallback
 app.get('/', (_req, res) => {

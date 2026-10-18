@@ -47,6 +47,7 @@ All detailed guides and architectural references have been centralized under `/d
 
 | Guide | Link | Overview |
 |---|---|---|
+| **Storefront Specifications** | [docs/specs.md](file:///Users/rabi/dev/marketplace/docs/specs.md) | Required storefront feature checklist (search, variants, PDP, auth, checkout) |
 | **Getting Started** | [docs/getting-started.md](file:///Users/rabi/dev/marketplace/docs/getting-started.md) | Prerequisites, environment files, single-workspace scripts, and build steps |
 | **Architecture & Topology** | [docs/architecture.md](file:///Users/rabi/dev/marketplace/docs/architecture.md) | High-level data flow diagram, service interactions, and technical design |
 | **Backend REST API** | [docs/api.md](file:///Users/rabi/dev/marketplace/docs/api.md) | Complete endpoint reference, query parameters, and JSON schemas |
@@ -74,6 +75,13 @@ Individual service scripts (can be executed from the root directory):
 ---
 
 ## 📋 Changelog
+
+### [1.3.0] - Storefront Feature Specifications & Checkout Flow
+- **Specs & Documentation**: Linked [docs/specs.md](file:///Users/rabi/dev/marketplace/docs/specs.md) to [docs/README.md](file:///Users/rabi/dev/marketplace/docs/README.md) and root [README.md](file:///Users/rabi/dev/marketplace/README.md).
+- **Search, Sort & Filters**: Added sorting by Relevance, Price Low-to-High, Price High-to-Low, and Name (A-Z). Added brand filters and discount-only toggle.
+- **Product Display Page (PDP)**: Implemented dedicated modal PDP displaying high-res imagery, description, brand, interactive variant selector, quantity stepper, "Add to Cart", "Subscribe & Save 10%", and direct "Checkout Now" actions.
+- **Authentication**: Added customer Sign Up & Sign In flows with session persistence and saved payment methods.
+- **Checkout Flow**: Complete checkout screen featuring cart item variants, price breakdown with discounts, calculated sales tax, total due, saved payment method selection or new card entry, order confirmation prompt modal, and automated customer receipt email generation.
 
 ### [1.2.0] - PostgreSQL & Prisma Integration with Dummy Reset
 - **Database**: Configured PostgreSQL (`psql marketplace`) via Prisma ORM.

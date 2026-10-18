@@ -196,3 +196,40 @@ Retrieves existing orders.
     "data": [ ... ]
   }
   ```
+
+---
+
+### 8. Distinct Brands
+Retrieves unique product brand names.
+
+- **Method**: `GET`
+- **Path**: `/api/products/brands`
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": ["Aura", "Titan", "Lumix", "Vertex", "Onyx", "Pulse"]
+  }
+  ```
+
+---
+
+### 9. Customer Authentication
+Enables customer sign-up and sign-in during the checkout flow.
+
+- **Method**: `POST`
+- **Path**: `/api/auth/signup`
+- **Body**: `{ "name": "Elena Rostova", "email": "elena@example.com", "password": "pass" }`
+
+- **Method**: `POST`
+- **Path**: `/api/auth/signin`
+- **Body**: `{ "email": "elena@example.com", "password": "pass" }`
+
+---
+
+### 10. Saved Payment Methods
+Retrieves and saves customer payment methods.
+
+- **Method**: `GET` / `POST`
+- **Path**: `/api/auth/users/:userId/payments`
+

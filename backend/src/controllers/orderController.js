@@ -3,6 +3,27 @@ import { orders as fallbackOrders } from '../data/mockData.js';
 
 const prisma = new PrismaClient();
 
+// Helper to simulate emailing receipt to customer
+const sendReceiptEmail = (order) => {
+  console.log('\n======================================================');
+  console.log(`📧 [EMAIL SERVICE] Sending Receipt to: ${order.customerEmail}`);
+  console.log(`📋 Order Reference: ${order.id}`);
+  console.log(`👤 Customer: ${order.customerName}`);
+  console.log(`💳 Payment: ${order.paymentMethod} (ending in ${order.cardLast4 || '4242'})`);
+  console.log('------------------------------------------------------');
+  console.log(`Subtotal:  $${Number(order.subtotal || 0).toFixed(2)}`);
+  console.log(`Discounts: -$${Number(order.discountAmount || 0).toFixed(2)}`);
+  console.log(`Tax:       $${Number(order.taxAmount || 0).toFixed(2)}`);
+  console.log(`TOTAL:     $${Number(order.totalAmount || 0).toFixed(2)}`);
+  console.log('------------------------------------------------------');
+  console.log('Items:');
+  order.items?.forEach((item, idx) => {
+    console.log(`  ${idx + 1}. Product: ${item.productId} (${item.variant || 'Standard'}) x ${item.quantity} @ $${item.price}`);
+  });
+  console.log('Status: Email successfully dispatched to customer inbox.');
+  console.log('======================================================\n');
+};
+
 export const getOrders = async (_req, res) => {
   try {
     const orders = await prisma.order.findMany({
@@ -30,7 +51,21 @@ export const getOrders = async (_req, res) => {
 };
 
 export const createOrder = async (req, res) => {
-  const { customerName, customerEmail, items, totalAmount } = req.body;
+  const {
+    customerName,
+    customerEmail,
+    userId,
+    items,
+    subtotal,
+    discountAmount,
+    taxAmount,
+    totalAmount,
+    paymentMethod,
+    cardLast4,
+    isSubscription,
+    savePayment,
+    cardDetails
+  } = req.body;
 
   if (!customerEmail || !items || !items.length) {
     return res.status(400).json({
@@ -42,16 +77,44 @@ export const createOrder = async (req, res) => {
   const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
 
   try {
+    // Optionally save payment method if customer requested it
+    if (savePayment && userId && cardDetails) {
+      try {
+        await prisma.savedPayment.create({
+          data: {
+            userId,
+            cardBrand: cardDetails.brand || 'Visa',
+            last4: cardDetails.last4 || '4242',
+            cardholderName: cardDetails.cardholderName || customerName,
+            expMonth: cardDetails.expMonth || '12',
+            expYear: cardDetails.expYear || '28',
+            isDefault: true
+          }
+        });
+      } catch (saveErr) {
+        console.warn('Could not auto-save card:', saveErr.message);
+      }
+    }
+
     const newOrder = await prisma.order.create({
       data: {
         id: orderId,
         customerName: customerName || 'Valued Customer',
         customerEmail,
+        userId: userId || null,
+        subtotal: Number(subtotal || totalAmount || 0),
+        discountAmount: Number(discountAmount || 0),
+        taxAmount: Number(taxAmount || 0),
         totalAmount: Number(totalAmount || 0),
-        status: 'pending',
+        paymentMethod: paymentMethod || 'card',
+        cardLast4: cardLast4 || '4242',
+        isSubscription: Boolean(isSubscription),
+        receiptEmailed: true,
+        status: 'confirmed',
         items: {
           create: items.map((i) => ({
             productId: i.productId,
+            variant: i.variant || null,
             quantity: Number(i.quantity) || 1,
             price: Number(i.price) || 0
           }))
@@ -62,26 +125,41 @@ export const createOrder = async (req, res) => {
       }
     });
 
+    // Simulate sending email receipt
+    sendReceiptEmail(newOrder);
+
     return res.status(201).json({
       success: true,
-      message: 'Order created successfully',
+      message: 'Order created successfully and receipt emailed',
+      receiptEmailed: true,
       data: newOrder
     });
   } catch (err) {
-    console.warn('Prisma order create failed, falling back to mock response:', err.message);
+    console.warn('Prisma order create failed, falling back:', err.message);
     const fallbackNewOrder = {
       id: orderId,
       customerName: customerName || 'Valued Customer',
       customerEmail,
-      items,
+      userId: userId || null,
+      subtotal: Number(subtotal || totalAmount || 0),
+      discountAmount: Number(discountAmount || 0),
+      taxAmount: Number(taxAmount || 0),
       totalAmount: Number(totalAmount || 0),
-      status: 'pending',
+      paymentMethod: paymentMethod || 'card',
+      cardLast4: cardLast4 || '4242',
+      isSubscription: Boolean(isSubscription),
+      receiptEmailed: true,
+      status: 'confirmed',
+      items,
       createdAt: new Date().toISOString()
     };
 
+    sendReceiptEmail(fallbackNewOrder);
+
     return res.status(201).json({
       success: true,
-      message: 'Order created successfully',
+      message: 'Order created successfully and receipt emailed',
+      receiptEmailed: true,
       data: fallbackNewOrder
     });
   }

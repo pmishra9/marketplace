@@ -1,0 +1,58 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Category {
+  id        String    @id
+  name      String
+  icon      String?
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Product {
+  id            String      @id
+  title         String
+  description   String
+  price         Float
+  originalPrice Float?
+  category      String
+  categoryRel   Category?   @relation(fields: [category], references: [id])
+  rating        Float       @default(5.0)
+  reviewsCount  Int         @default(0)
+  stock         Int         @default(0)
+  badge         String?
+  image         String
+  featured      Boolean     @default(false)
+  orderItems    OrderItem[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Order {
+  id            String      @id
+  customerName  String
+  customerEmail String
+  totalAmount   Float
+  status        String      @default("pending")
+  items         OrderItem[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+  price     Float
+  createdAt DateTime @default(now())
+}

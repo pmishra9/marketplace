@@ -21,7 +21,13 @@ This document details the design choices, service communications, and integratio
                                    |                         |
                                    +------------+------------+
                                                 |
-                                      (Shared Data/DB Layer)
+                                    (Prisma ORM Client)
+                                                |
+                                                v
+                                  +---------------------------+
+                                  |   PostgreSQL Database     |
+                                  |    (psql marketplace)     |
+                                  +---------------------------+
 ```
 
 ---

@@ -1,143 +1,97 @@
 # Marketplace Monorepo
 
-> A full-stack monorepo featuring a **NodeJS REST Backend**, a modern **React 19 Marketplace Storefront**, and an **AdminJS Management Portal**.
-
-📖 **Central Documentation & Architecture**: See [docs/README.md](file:///Users/rabi/dev/marketplace/docs/README.md) and [docs/architecture.md](file:///Users/rabi/dev/marketplace/docs/architecture.md) for the source of truth.
-
----
-
-## 🏗️ Repository Architecture
-
-This repository uses **npm workspaces** with three core sub-projects:
-
-```
-marketplace/
-├── admin/                     # AdminJS portal (Port 3001)
-│   ├── src/
-│   │   └── server.js          # AdminJS + Express server with authenticated router
-│   ├── .env.example
-│   └── package.json
-│
-├── backend/                   # Node.js Express REST API (Port 4000)
-│   ├── src/
-│   │   ├── controllers/       # Product and order business logic
-│   │   ├── data/              # Mock catalog, categories & orders data
-│   │   ├── routes/            # Express route definitions (/api/products, /api/orders)
-│   │   └── server.js          # Express app entry point & middleware
-│   ├── .env.example
-│   └── package.json
-│
-├── market/                    # Marketplace React Storefront (Port 3000)
-│   ├── src/
-│   │   ├── App.jsx            # Interactive catalog, search, filters & cart drawer
-│   │   ├── index.css          # Glassmorphism dark-theme design tokens
-│   │   └── main.jsx           # React DOM root mounting
-│   ├── index.html             # SEO meta tags, Google Fonts (Plus Jakarta Sans & Space Grotesk)
-│   ├── vite.config.js         # Vite dev server with proxy to backend port 4000
-│   └── package.json
-│
-├── docs/                      # Central documentation source of truth
-│   ├── README.md              # Project principles and workspace roadmap
-│   └── architecture.md        # Technical architecture and data flow diagrams
-│
-├── .env.example               # Unified environment variable template
-├── package.json               # Root monorepo workspace configuration
-└── README.md                  # This file
-```
+> Full-stack e-commerce monorepo featuring a **Node.js Express REST Backend**, a **React 19 Marketplace Storefront**, and an **AdminJS Administration Portal** connected to **PostgreSQL**.
 
 ---
 
 ## ⚡ Quick Start
 
-### 1. Prerequisites
-- **Node.js** v18+ (tested on Node 20 LTS and Node 23)
-- **npm** v8+
-
-### 2. Installation
-Install all dependencies across all workspaces with a single command from the root directory:
-
 ```bash
+# 1. Install all dependencies across all workspaces
 npm install
-```
 
-### 3. Run Everything Concurrently
-Launch all three services simultaneously (backend on `:4000`, admin on `:3001`, and frontend on `:3000`):
+# 2. Reset & populate PostgreSQL with dummy data (psql marketplace)
+npm run db:reset
 
-```bash
+# 3. Start all services concurrently
 npm run dev
 ```
 
 ---
 
-## 🖥️ Services & Endpoints
+## 🖥️ Services & Local Endpoints
 
-| Service | Workspace | URL | Default Port | Description |
+| Service | Workspace | Local Address | Default Port | Description |
 |---|---|---|---|---|
-| **Marketplace Frontend** | `market` | [http://localhost:3000](http://localhost:3000) | `3000` | E-commerce web app with search, category filtering & cart drawer |
-| **AdminJS Portal** | `admin` | [http://localhost:3001/admin](http://localhost:3001/admin) | `3001` | Management dashboard for products and orders |
-| **Node.js Backend** | `backend` | [http://localhost:4000](http://localhost:4000) | `4000` | REST API service with CORS, logging & JSON endpoints |
-
-### Default AdminJS Credentials
-- **URL**: [http://localhost:3001/admin](http://localhost:3001/admin)
-- **Email**: `admin@marketplace.local`
-- **Password**: `adminsecret`
-
-*(Configurable via `admin/.env` or root `.env`)*
+| **Marketplace Storefront** | `market` | [http://localhost:3000](http://localhost:3000) | `3000` | Customer-facing React app with search & cart |
+| **AdminJS Portal** | `admin` | [http://localhost:3001/admin](http://localhost:3001/admin) | `3001` | Management console (`admin@marketplace.local` / `adminsecret`) |
+| **Backend REST API** | `backend` | [http://localhost:4000](http://localhost:4000) | `4000` | Node.js Express API with CORS and JSON endpoints |
+| **PostgreSQL Database** | Root / Local | `localhost:5432` | `5432` | Database `marketplace` via Prisma ORM |
 
 ---
 
-## 🛠️ Individual Workspace Scripts
-
-You can run, test, or build individual packages from the root:
+## 🗄️ Database Commands
 
 | Command | Action |
 |---|---|
-| `npm run dev:backend` | Starts the Express API with `node --watch` on port 4000 |
-| `npm run dev:admin` | Starts the AdminJS portal on port 3001 |
-| `npm run dev:market` | Starts the Vite React development server on port 3000 |
-| `npm run build` | Builds all production bundles across workspaces |
+| `npm run db:reset` | **Wipes & re-imports all dummy data** into `psql marketplace` |
+| `npm run db:seed` | Imports dummy categories, products, and orders into PostgreSQL |
+| `npm run db:push` | Pushes the Prisma schema to sync tables in PostgreSQL |
+| `npm run db:generate` | Re-generates the `@prisma/client` code |
 
 ---
 
-## 📡 REST API Reference
+## 📚 Central Documentation Hub
 
-The backend exposes the following endpoints:
+All detailed guides and architectural references have been centralized under `/docs`:
 
-| Method | Endpoint | Description |
+| Guide | Link | Overview |
 |---|---|---|
-| `GET` | `/api/health` | Health status and timestamp |
-| `GET` | `/api/products` | Retrieve catalog with optional query filters (`?q=`, `?category=`, `?sort=`) |
-| `GET` | `/api/products/:id` | Fetch product details by ID |
-| `POST` | `/api/products` | Create a new product |
-| `GET` | `/api/products/categories` | Retrieve available category taxonomy |
-| `GET` | `/api/orders` | List existing orders |
-| `POST` | `/api/orders` | Place a new customer order |
+| **Getting Started** | [docs/getting-started.md](file:///Users/rabi/dev/marketplace/docs/getting-started.md) | Prerequisites, environment files, single-workspace scripts, and build steps |
+| **Architecture & Topology** | [docs/architecture.md](file:///Users/rabi/dev/marketplace/docs/architecture.md) | High-level data flow diagram, service interactions, and technical design |
+| **Backend REST API** | [docs/api.md](file:///Users/rabi/dev/marketplace/docs/api.md) | Complete endpoint reference, query parameters, and JSON schemas |
+| **AdminJS Portal** | [docs/admin.md](file:///Users/rabi/dev/marketplace/docs/admin.md) | Dashboard setup, credentials, session configuration, and ORM adapter guides |
+| **Docs Index** | [docs/README.md](file:///Users/rabi/dev/marketplace/docs/README.md) | Central documentation directory and architectural rules |
 
 ---
 
-## 🔧 Environment Configuration
+## 🛠️ Workspaces Overview
 
-Copy the template files to configure your environment variables:
-
-```bash
-cp .env.example .env
-cp backend/.env.example backend/.env
-cp admin/.env.example admin/.env
+```
+marketplace/
+├── admin/                     # AdminJS portal with PostgreSQL models (Port 3001)
+├── backend/                   # Node.js Express REST API & Prisma (Port 4000)
+├── market/                    # React 19 + Vite Storefront (Port 3000)
+└── docs/                      # Central documentation hub
 ```
 
-Key environment settings:
-- `PORT` (backend): default `4000` *(avoiding macOS AirPlay port 5000)*
-- `PORT` (admin): default `3001`
-- `ADMIN_EMAIL` / `ADMIN_PASSWORD`: Credentials for the AdminJS dashboard
-- `SESSION_SECRET`: Secret key for session cookie encryption
+Individual service scripts (can be executed from the root directory):
+- `npm run dev:backend` — Starts the backend API
+- `npm run dev:admin` — Starts the AdminJS portal
+- `npm run dev:market` — Starts the Vite React frontend
+- `npm run build` — Compiles production bundles
 
 ---
 
 ## 📋 Changelog
+
+### [1.2.0] - PostgreSQL & Prisma Integration with Dummy Reset
+- **Database**: Configured PostgreSQL (`psql marketplace`) via Prisma ORM.
+- **Models**: Created `Category`, `Product`, `Order`, and `OrderItem` schemas in [backend/prisma/schema.prisma](file:///Users/rabi/dev/marketplace/backend/prisma/schema.prisma).
+- **Dummy Import & Reset**: Built automated seed and reset script [backend/prisma/seed.js](file:///Users/rabi/dev/marketplace/backend/prisma/seed.js) with `npm run db:seed` and `npm run db:reset`.
+- **Backend**: Updated product and order controllers to query and persist to PostgreSQL via `@prisma/client` with graceful fallbacks.
+- **AdminJS**: Registered `@adminjs/prisma` adapter to auto-expose `Category`, `Product`, `Order`, and `OrderItem` in the AdminJS console.
+
+### [1.1.0] - Modular Documentation Architecture
+- **Docs**: Decoupled exhaustive documentation from root `README.md` into dedicated `/docs/` guides:
+  - Added [docs/getting-started.md](file:///Users/rabi/dev/marketplace/docs/getting-started.md) for environment setup and scripts.
+  - Added [docs/api.md](file:///Users/rabi/dev/marketplace/docs/api.md) for REST API specifications and contracts.
+  - Added [docs/admin.md](file:///Users/rabi/dev/marketplace/docs/admin.md) for AdminJS configuration and ORM adapters.
+  - Updated [docs/README.md](file:///Users/rabi/dev/marketplace/docs/README.md) as the primary documentation directory.
+- **Root**: Streamlined root `README.md` to serve as a fast-glance landing page pointing to `/docs`.
 
 ### [1.0.0] - Initial Monorepo Scaffolding
 - **Root**: Configured npm workspaces linking `backend`, `market`, and `admin` with concurrent run scripts.
 - **Backend**: Built Express ES-module REST API with product catalog search, category filtering, and order handling on port 4000.
 - **Admin**: Configured AdminJS v7 Express server with session authentication on port 3001.
 - **Market**: Scaffolding of React 19 + Vite frontend featuring dark glassmorphic design system, responsive catalog grid, interactive cart drawer, and backend proxy.
-- **Docs**: Created central documentation repository in `/docs/README.md` and `/docs/architecture.md` according to documentation protocol.

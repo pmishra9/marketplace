@@ -1,21 +1,38 @@
 import express from 'express';
-import session from 'express-session';
 import AdminJS from 'adminjs';
 import * as AdminJSExpress from '@adminjs/express';
+import { Database, Resource } from '@adminjs/prisma';
+import { PrismaClient, Prisma } from '@prisma/client';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: join(__dirname, '../.env') });
 
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(process.env.ADMIN_PORT) || 3001;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'marketplace-admin-secret-session-key-dev';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@marketplace.local';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminsecret';
 
 const startAdminServer = async () => {
   const app = express();
-
   app.use(cors({ origin: true, credentials: true }));
+
+  // Register Prisma Adapter
+  AdminJS.registerAdapter({ Database, Resource });
+  const prisma = new PrismaClient();
+
+  // Load Prisma Models dynamically from DMMF
+  const models = Prisma.dmmf?.datamodel?.models || [];
+  const resources = models.map((model) => ({
+    resource: new Resource({ model, client: prisma }),
+    options: {
+      navigation: { name: 'Marketplace DB' }
+    }
+  }));
 
   // AdminJS Configuration
   const admin = new AdminJS({
@@ -25,16 +42,15 @@ const startAdminServer = async () => {
       softwareBrothers: false,
       logo: false
     },
-    resources: []
+    resources
   });
 
-  // Watch for changes in development or build assets
+  // Watch for asset changes in development
   if (process.env.NODE_ENV !== 'production') {
     admin.watch();
   }
 
-  // Create session and admin router
-  // We provide buildAuthenticatedRouter with default fallback credentials
+  // Create session and authenticated router
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
     admin,
     {
@@ -72,6 +88,8 @@ const startAdminServer = async () => {
       status: 'ok',
       service: 'adminjs-portal',
       adminUrl: '/admin',
+      database: 'postgresql://marketplace',
+      resources: resources.map((r) => r.resource.id()),
       timestamp: new Date().toISOString()
     });
   });
@@ -79,6 +97,7 @@ const startAdminServer = async () => {
   app.listen(PORT, () => {
     console.log(`🛡️  AdminJS Portal is running on http://localhost:${PORT}/admin`);
     console.log(`🔑 Default credentials: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+    console.log(`📊 Registered models: ${resources.map((r) => r.resource.id()).join(', ')}`);
   });
 };
 

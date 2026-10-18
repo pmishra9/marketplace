@@ -1,0 +1,22 @@
+{
+  "name": "marketplace-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for Marketplace: Node.js Backend, React Marketplace Frontend, and AdminJS Admin Panel",
+  "workspaces": [
+    "backend",
+    "market",
+    "admin"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,admin,market -c blue,magenta,cyan \"npm run dev --workspace=backend\" \"npm run dev --workspace=admin\" \"npm run dev --workspace=market\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:admin": "npm run dev --workspace=admin",
+    "dev:market": "npm run dev --workspace=market",
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm run start --workspace=backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

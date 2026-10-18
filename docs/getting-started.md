@@ -31,17 +31,21 @@ This leverages **npm workspaces** to link shared packages and handle hoisting au
 
 ## Environment Setup
 
-Template environment files are provided for the root and each workspace:
+Template environment files are provided for the root and each workspace. Copy each workspace template from inside that workspace:
 
 ```bash
 # Optional root template
 cp .env.example .env
 
 # Backend configuration
-cp backend/.env.example backend/.env
+cd backend
+cp .env.example .env
+cd ..
 
 # AdminJS configuration
-cp admin/.env.example admin/.env
+cd admin
+cp .env.example .env
+cd ..
 ```
 
 ### Key Defaults
@@ -58,23 +62,33 @@ cp admin/.env.example admin/.env
 
 ## 🗄️ PostgreSQL Database & Dummy Import
 
-The monorepo uses Prisma ORM connected to your local `marketplace` database (`psql marketplace`).
-
-After copying `backend/.env.example`, replace `USER` and `PASSWORD` in `DATABASE_URL` with your local PostgreSQL credentials. The template deliberately does not assume a machine-specific database role.
-
-The development customer login is `rabi` / `rabi`. After syncing the schema, seed or refresh just this account with:
+The monorepo uses Prisma ORM connected to your local `marketplace` database (`psql marketplace`). Run the database commands in this section from `backend/`:
 
 ```bash
-npm run db:push
+cd backend
+```
+
+Copy `.env.example` to `.env` if you have not already, then replace `USER` and `PASSWORD` in `DATABASE_URL` with your local PostgreSQL credentials. The template deliberately does not assume a machine-specific database role. Apply schema changes from checked-in migration files with `npm run db:migrate`.
+
+The development customer login is `rabi` / `rabi`. After applying migrations, seed or refresh just this account with:
+
+```bash
+npm run db:migrate
 npm run db:seed:auth
 ```
 
 The full `npm run db:reset` flow also creates the account along with the sample catalog and orders.
 
-### 1. Initialize / Push Schema to DB
-Synchronize the Prisma models (`Category`, `Product`, `Order`, `OrderItem`) to PostgreSQL:
+### 1. Apply Database Migrations (`backend/`)
+Apply checked-in Prisma schema changes to PostgreSQL:
 ```bash
-npm run db:push
+npm run db:migrate
+```
+
+When changing `prisma/schema.prisma` during development, create a migration from `backend/` with a descriptive name:
+
+```bash
+npm run db:migrate:dev -- --name add_product_field
 ```
 
 ### 2. Import Dummy Data (Seed)
@@ -95,19 +109,25 @@ npm run db:reset
 ## Running the Applications
 
 ### 1. Run Everything Concurrently
-Start all three applications (`backend`, `admin`, and `market`) together:
+Start all three applications (`backend`, `admin`, and `market`) together from the repository root. This command applies migrations first:
 
 ```bash
 npm run dev
 ```
 
 ### 2. Run Services Individually
-You can start any individual service directly from the root:
+
+Start just the backend from the `backend/` directory. Apply migrations first when starting after a schema change:
 
 ```bash
-# Start Node.js Express backend (watches for file changes)
-npm run dev:backend
+cd backend
+npm run db:migrate
+npm run dev
+```
 
+The admin and storefront can be started from the repository root:
+
+```bash
 # Start AdminJS dashboard
 npm run dev:admin
 
@@ -129,8 +149,25 @@ npm run dev:market
 
 ## Production Builds
 
-Build production bundles for all workspaces:
+Build production bundles for all workspaces from the repository root:
 
 ```bash
 npm run build
 ```
+
+## Production Backend Deployment
+
+Set production environment variables in the hosting platform, including `NODE_ENV=production`, `DATABASE_URL`, and a strong `JWT_SECRET`. Run database migrations once as a deployment or release step from `backend/`, using an environment where the Prisma CLI is installed:
+
+```bash
+cd backend
+npm run db:migrate
+```
+
+Configure the backend service's process start command as:
+
+```bash
+npm start
+```
+
+Use `prisma migrate deploy` (`npm run db:migrate`) for production migrations. Do not use `db:migrate:dev` or `db:reset` against production data. Keep migration deployment separate from the long-running server process so each release applies migrations once before starting the application.

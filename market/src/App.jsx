@@ -174,6 +174,10 @@ export default function App() {
   // Checkout & Customer Flow State
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [productReviews, setProductReviews] = useState([]);
+  const [reviewEligibility, setReviewEligibility] = useState(null);
+  const [reviewDraft, setReviewDraft] = useState({ rating: '5', title: '', body: '' });
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const [authTab, setAuthTab] = useState('signup'); // 'signup' | 'signin' | 'authenticated'
   const [authFormData, setAuthFormData] = useState({ name: '', username: '', email: '', password: '' });
@@ -189,6 +193,22 @@ export default function App() {
   const [showConfirmPrompt, setShowConfirmPrompt] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+
+  const authHeaders = (user = currentUser) => user?.token
+    ? { Authorization: `Bearer ${user.token}` }
+    : {};
+
+  useEffect(() => {
+    const token = window.localStorage.getItem('marketplaceAccessToken');
+    if (!token) return;
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user) setCurrentUser({ ...data.user, token });
+        else window.localStorage.removeItem('marketplaceAccessToken');
+      })
+      .catch(() => {});
+  }, []);
 
   const navigate = (path, replace = false) => {
     if (window.location.pathname !== path) {
@@ -268,6 +288,31 @@ export default function App() {
       cancelled = true;
     };
   }, [route, products, selectedProduct]);
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      setProductReviews([]);
+      setReviewEligibility(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/reviews/products/${encodeURIComponent(selectedProduct.id)}`, {
+      headers: authHeaders()
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        setProductReviews(data?.data || []);
+        setReviewEligibility(data?.eligibility || null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProductReviews([]);
+          setReviewEligibility(null);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [selectedProduct, currentUser]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -351,13 +396,52 @@ export default function App() {
       if (!res.ok || !data.user) {
         throw new Error(data.message || 'Unable to authenticate. Please check your details and try again.');
       }
-      setCurrentUser(data.user);
+      if (!data.token) throw new Error('The account service did not return a sign-in token. Please try again.');
+      const signedInUser = { ...data.user, token: data.token };
+      window.localStorage.setItem('marketplaceAccessToken', data.token);
+      setCurrentUser(signedInUser);
       setSelectedSavedCardId(data.user.savedPayments?.find((payment) => payment.isDefault)?.id || data.user.savedPayments?.[0]?.id || '');
       setPaymentChoice(data.user.savedPayments?.length ? 'saved' : 'new');
       showToast(`Welcome, ${data.user.name}!`);
     } catch (error) {
       showToast(error.message || 'Unable to reach the account service. Please try again.');
     }
+  };
+
+  const handleReviewSubmit = async (event) => {
+    event.preventDefault();
+    if (!selectedProduct || !currentUser?.token) return;
+    setIsSubmittingReview(true);
+    try {
+      const response = await fetch(`/api/reviews/products/${encodeURIComponent(selectedProduct.id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(reviewDraft)
+      });
+      const data = await response.json();
+      if (!response.ok || !data.data) throw new Error(data.message || 'Your review could not be saved.');
+      setProductReviews((reviews) => [data.data, ...reviews]);
+      setReviewEligibility({ canReview: false, alreadyReviewed: true, purchased: true });
+      setReviewDraft({ rating: '5', title: '', body: '' });
+      showToast('Your review has been posted.');
+    } catch (error) {
+      showToast(error.message || 'Your review could not be saved.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const handleSignout = async () => {
+    if (currentUser?.token) {
+      try {
+        await fetch('/api/auth/signout', { method: 'POST', headers: authHeaders() });
+      } catch {
+        // Clear the local session even if the API is unavailable.
+      }
+    }
+    window.localStorage.removeItem('marketplaceAccessToken');
+    setCurrentUser(null);
+    setAuthTab('signin');
   };
 
   // Order Placement
@@ -373,7 +457,7 @@ export default function App() {
       showToast('Choose a saved payment method or enter a new card.');
       return;
     }
-    if (paymentChoice === 'new' && (cardNumber.length < 12 || cardNumber.length > 19 || !/^\d{2}\/\d{2}$/.test(newCardData.exp) || !/^\d{3,4}$/.test(newCardData.cvc) || !newCardData.cardholderName.trim())) {
+    if (paymentChoice === 'new' && (cardNumber.length < 12 || cardNumber.length > 19 || !/^\d{2}\/\d{2}$/.test(newCardData.exp) || !/^\d{3}$/.test(newCardData.cvc) || !newCardData.cardholderName.trim())) {
       showToast('Enter a valid cardholder name, card number, expiry date, and CVC.');
       return;
     }
@@ -381,13 +465,7 @@ export default function App() {
     setIsSubmittingOrder(true);
     setShowConfirmPrompt(false);
 
-    const cardLast4 = paymentChoice === 'saved' ? selectedCard.last4 : cardNumber.slice(-4);
-    const paymentMethodName = paymentChoice === 'saved' ? `Saved Card (${selectedCard?.cardBrand || 'Card'})` : 'Credit Card';
-
     const orderPayload = {
-      customerName: currentUser?.name || 'Guest Explorer',
-      customerEmail: currentUser?.email || 'guest@example.com',
-      userId: currentUser?.id,
       items: cart.map((i) => ({
         productId: i.id,
         variant: i.chosenVariant,
@@ -398,23 +476,22 @@ export default function App() {
       discountAmount: cartTotals.discountTotal,
       taxAmount: cartTotals.tax,
       totalAmount: cartTotals.total,
-      paymentMethod: paymentMethodName,
-      cardLast4,
       isSubscription: cart.some((i) => i.isSubscription),
+      paymentType: paymentChoice,
+      savedPaymentId: paymentChoice === 'saved' ? selectedCard.id : undefined,
       savePayment: paymentChoice === 'new' && newCardData.saveForFuture,
       cardDetails: paymentChoice === 'new' ? {
-        brand: 'Visa',
-        last4: cardLast4,
+        number: cardNumber,
+        expiry: newCardData.exp,
+        cvc: newCardData.cvc,
         cardholderName: newCardData.cardholderName || currentUser.name,
-        expMonth: newCardData.exp.slice(0, 2),
-        expYear: newCardData.exp.slice(3)
       } : undefined
     };
 
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(orderPayload)
       });
       const data = await res.json();
@@ -424,6 +501,17 @@ export default function App() {
       const confirmed = data.data;
       setConfirmedOrder(confirmed);
       setCart([]);
+      setNewCardData((value) => ({ ...value, number: '', cvc: '' }));
+      if (orderPayload.savePayment) {
+        fetch('/api/auth/me', { headers: authHeaders() })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((userData) => {
+            if (userData?.user && currentUser?.token) {
+              setCurrentUser({ ...userData.user, token: currentUser.token });
+            }
+          })
+          .catch(() => {});
+      }
     } catch (error) {
       showToast(error.message || 'Unable to reach the order service. Please try again.');
     } finally {
@@ -809,6 +897,11 @@ export default function App() {
                 </div>
 
                 <p className="pdp-description">{selectedProduct.description}</p>
+                {selectedProduct.upc && (
+                  <p style={{ color: 'var(--text-dim)', fontSize: '0.82rem', margin: '0.75rem 0' }}>
+                    UPC-A: <span style={{ fontFamily: 'monospace', letterSpacing: '0.08em' }}>{selectedProduct.upc}</span>
+                  </p>
+                )}
 
                 {/* Show Product Variants */}
                 {selectedProduct.variants?.length > 0 && (
@@ -893,6 +986,46 @@ export default function App() {
                     {isSubscribedOption ? '✓ Subscribed' : 'Select Subscription'}
                   </button>
                 </div>
+
+                <section aria-labelledby="product-reviews-title" style={{ marginTop: '2rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.5rem' }}>
+                  <h3 id="product-reviews-title">Customer reviews</h3>
+                  {!currentUser && <p>Sign in after purchasing this product to write a review.</p>}
+                  {currentUser && reviewEligibility?.canReview && (
+                    <form onSubmit={handleReviewSubmit} style={{ display: 'grid', gap: '0.75rem', margin: '1rem 0' }}>
+                      <label className="input-field-group">
+                        <span>Rating</span>
+                        <select value={reviewDraft.rating} onChange={(event) => setReviewDraft({ ...reviewDraft, rating: event.target.value })}>
+                          {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} stars</option>)}
+                        </select>
+                      </label>
+                      <label className="input-field-group">
+                        <span>Title (optional)</span>
+                        <input maxLength={120} value={reviewDraft.title} onChange={(event) => setReviewDraft({ ...reviewDraft, title: event.target.value })} />
+                      </label>
+                      <label className="input-field-group">
+                        <span>Your review</span>
+                        <textarea required maxLength={4000} rows={4} value={reviewDraft.body} onChange={(event) => setReviewDraft({ ...reviewDraft, body: event.target.value })} />
+                      </label>
+                      <button className="btn-add-cart-large" disabled={isSubmittingReview}>
+                        {isSubmittingReview ? 'Posting…' : 'Post review'}
+                      </button>
+                    </form>
+                  )}
+                  {currentUser && reviewEligibility && !reviewEligibility.canReview && (
+                    <p>{reviewEligibility.alreadyReviewed ? 'You have already reviewed this product.' : reviewEligibility.purchased ? 'Your purchase is eligible for a review.' : 'Reviews are available after you purchase this product.'}</p>
+                  )}
+                  {productReviews.length === 0 ? <p>No written reviews yet.</p> : (
+                    <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
+                      {productReviews.map((review) => (
+                        <article key={review.id} style={{ padding: '1rem', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+                          <strong>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} {review.title || ''}</strong>
+                          <p>{review.body}</p>
+                          <small style={{ color: 'var(--text-dim)' }}>By {review.user?.name || 'Customer'} · {new Date(review.createdAt).toLocaleDateString()}</small>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </section>
               </div>
             </div>
           </div>
@@ -1052,10 +1185,7 @@ export default function App() {
                       {currentUser && (
                         <button
                           style={{ background: 'none', color: 'var(--accent-cyan)', fontSize: '0.8rem', cursor: 'pointer' }}
-                          onClick={() => {
-                            setCurrentUser(null);
-                            setAuthTab('signin');
-                          }}
+                          onClick={handleSignout}
                         >
                           Switch Account
                         </button>
@@ -1225,6 +1355,7 @@ export default function App() {
                             value={newCardData.number}
                             onChange={(e) => setNewCardData({ ...newCardData, number: e.target.value })}
                           />
+                          <small style={{ color: 'var(--text-dim)' }}>Local test card: 4242 4242 4242 4242 · any future MM/YY · any 3-digit CVC</small>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                           <div className="input-field-group">
@@ -1337,7 +1468,7 @@ export default function App() {
                     You are placing an order for <strong>${cartTotals.total.toFixed(2)}</strong> ({cartTotals.totalItems} item(s)).
                   </p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
-                    Demo checkout records the order but does not process a card payment.
+                    Local mock payment authorizes only the listed test card; no real card is charged.
                   </p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--accent-emerald)' }}>
                     ✓ An itemized receipt will be generated for {currentUser?.email || 'your email'}.
@@ -1356,7 +1487,7 @@ export default function App() {
                       onClick={handleFinalOrderPlacement}
                       disabled={isSubmittingOrder}
                     >
-                      {isSubmittingOrder ? 'Processing...' : 'Place Demo Order'}
+                      {isSubmittingOrder ? 'Processing...' : 'Authorize & Place Order'}
                     </button>
                   </div>
                 </div>

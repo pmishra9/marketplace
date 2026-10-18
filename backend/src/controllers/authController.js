@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { hashPassword, verifyPassword } from '../utils/passwords.js';
+import { createAccessToken } from '../utils/tokens.js';
 
 const prisma = new PrismaClient();
 
@@ -48,12 +49,13 @@ export const signup = async (req, res) => {
       }
     });
 
-    const { password: _, ...userSafe } = newUser;
+    const { password: _, tokenVersion: __, ...userSafe } = newUser;
 
     return res.status(201).json({
       success: true,
       message: 'Account created successfully',
-      user: userSafe
+      user: userSafe,
+      token: createAccessToken(newUser)
     });
   } catch (err) {
     console.error('Signup database error:', err.message);
@@ -63,7 +65,6 @@ export const signup = async (req, res) => {
     });
   }
 };
-
 export const signin = async (req, res) => {
   const { username, email, password } = req.body;
   const login = String(username || email || '').trim().toLowerCase();
@@ -103,12 +104,13 @@ export const signin = async (req, res) => {
       });
     }
 
-    const { password: _, ...userSafe } = user;
+    const { password: _, tokenVersion: __, ...userSafe } = user;
 
     return res.json({
       success: true,
       message: 'Signed in successfully',
-      user: userSafe
+      user: userSafe,
+      token: createAccessToken(user)
     });
   } catch (err) {
     console.error('Signin database error:', err.message);
@@ -119,8 +121,39 @@ export const signin = async (req, res) => {
   }
 };
 
+export const getCurrentUser = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.authUser.id },
+      include: { savedPayments: true }
+    });
+    if (!user) return res.status(401).json({ success: false, message: 'Please sign in again.' });
+    const { password: _, tokenVersion: __, ...userSafe } = user;
+    return res.json({ success: true, user: userSafe });
+  } catch (err) {
+    console.error('Current user lookup failed:', err.message);
+    return res.status(503).json({ success: false, message: 'Account service is unavailable. Please try again later.' });
+  }
+};
+
+export const signout = async (req, res) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.authUser.id },
+      data: { tokenVersion: { increment: 1 } }
+    });
+    return res.json({ success: true, message: 'Signed out successfully' });
+  } catch (err) {
+    console.error('Signout failed:', err.message);
+    return res.status(503).json({ success: false, message: 'Account service is unavailable. Please try again later.' });
+  }
+};
+
 export const getSavedPayments = async (req, res) => {
   const { userId } = req.params;
+  if (req.authUser.id !== userId) {
+    return res.status(403).json({ success: false, message: 'You can only view your own saved payments.' });
+  }
 
   try {
     const payments = await prisma.savedPayment.findMany({
@@ -129,48 +162,5 @@ export const getSavedPayments = async (req, res) => {
     return res.json({ success: true, data: payments });
   } catch (err) {
     return res.json({ success: true, data: [] });
-  }
-};
-
-export const addSavedPayment = async (req, res) => {
-  const { userId } = req.params;
-  const { cardBrand, last4, cardholderName, expMonth, expYear, isDefault } = req.body;
-
-  if (!last4 || !cardBrand) {
-    return res.status(400).json({
-      success: false,
-      message: 'Card details are incomplete'
-    });
-  }
-
-  try {
-    const payment = await prisma.savedPayment.create({
-      data: {
-        userId,
-        cardBrand,
-        last4,
-        cardholderName: cardholderName || 'Cardholder',
-        expMonth: expMonth || '12',
-        expYear: expYear || '28',
-        isDefault: Boolean(isDefault)
-      }
-    });
-
-    return res.status(201).json({ success: true, data: payment });
-  } catch (err) {
-    console.warn('Save payment error:', err.message);
-    return res.status(201).json({
-      success: true,
-      data: {
-        id: `pay-${Date.now().toString().slice(-4)}`,
-        userId,
-        cardBrand,
-        last4,
-        cardholderName: cardholderName || 'Cardholder',
-        expMonth: expMonth || '12',
-        expYear: expYear || '28',
-        isDefault: true
-      }
-    });
   }
 };

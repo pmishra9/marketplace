@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { orders as fallbackOrders } from '../data/mockData.js';
+import { authorizeLocalPayment, PaymentError } from '../utils/localPayments.js';
 
 const prisma = new PrismaClient();
 
@@ -24,9 +25,10 @@ const logReceiptEmail = (order) => {
   console.log('======================================================\n');
 };
 
-export const getOrders = async (_req, res) => {
+export const getOrders = async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
+      where: { userId: req.authUser.id },
       include: {
         items: true
       },
@@ -42,72 +44,71 @@ export const getOrders = async (_req, res) => {
     });
   } catch (err) {
     console.warn('Database query fallback to mockData:', err.message);
+    const userOrders = fallbackOrders.filter((order) => order.userId === req.authUser.id);
     return res.json({
       success: true,
-      count: fallbackOrders.length,
-      data: fallbackOrders
+      count: userOrders.length,
+      data: userOrders
     });
   }
 };
 
 export const createOrder = async (req, res) => {
   const {
-    customerName,
-    customerEmail,
-    userId,
     items,
     subtotal,
     discountAmount,
     taxAmount,
     totalAmount,
-    paymentMethod,
-    cardLast4,
     isSubscription,
     savePayment,
+    paymentType,
+    savedPaymentId,
     cardDetails
   } = req.body;
 
-  if (!customerEmail || !items || !items.length) {
+  if (!items || !items.length) {
     return res.status(400).json({
       success: false,
-      message: 'Customer email and at least one order item are required'
+      message: 'At least one order item is required'
     });
+  }
+
+  let payment;
+  try {
+    payment = await authorizeLocalPayment({
+      prisma,
+      userId: req.authUser.id,
+      paymentType,
+      savedPaymentId,
+      cardDetails
+    });
+  } catch (err) {
+    if (err instanceof PaymentError) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
+    console.error('Local payment authorization failed:', err.message);
+    return res.status(503).json({ success: false, message: 'The payment service is unavailable. Please try again.' });
   }
 
   const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
 
   try {
-    // Optionally save payment method if customer requested it
-    if (savePayment && userId && cardDetails) {
-      try {
-        await prisma.savedPayment.create({
-          data: {
-            userId,
-            cardBrand: cardDetails.brand || 'Visa',
-            last4: cardDetails.last4 || '4242',
-            cardholderName: cardDetails.cardholderName || customerName,
-            expMonth: cardDetails.expMonth || '12',
-            expYear: cardDetails.expYear || '28',
-            isDefault: true
-          }
-        });
-      } catch (saveErr) {
-        console.warn('Could not auto-save card:', saveErr.message);
-      }
-    }
-
     const newOrder = await prisma.order.create({
       data: {
         id: orderId,
-        customerName: customerName || 'Valued Customer',
-        customerEmail,
-        userId: userId || null,
+        customerName: req.authUser.name,
+        customerEmail: req.authUser.email,
+        userId: req.authUser.id,
         subtotal: Number(subtotal || totalAmount || 0),
         discountAmount: Number(discountAmount || 0),
         taxAmount: Number(taxAmount || 0),
         totalAmount: Number(totalAmount || 0),
-        paymentMethod: paymentMethod || 'card',
-        cardLast4: cardLast4 || '4242',
+        paymentMethod: paymentType === 'saved' ? `Saved Card (${payment.cardBrand})` : payment.cardBrand,
+        paymentProvider: payment.provider,
+        paymentReference: payment.reference,
+        paymentStatus: payment.status,
+        cardLast4: payment.last4,
         isSubscription: Boolean(isSubscription),
         receiptEmailed: false,
         status: 'confirmed',
@@ -125,6 +126,26 @@ export const createOrder = async (req, res) => {
       }
     });
 
+    if (savePayment && paymentType === 'new' && cardDetails) {
+      try {
+        await prisma.savedPayment.create({
+          data: {
+            userId: req.authUser.id,
+            cardBrand: payment.cardBrand,
+            last4: payment.last4,
+            cardholderName: typeof cardDetails.cardholderName === 'string' && cardDetails.cardholderName.trim()
+              ? cardDetails.cardholderName.trim()
+              : req.authUser.name,
+            expMonth: cardDetails.expiry.slice(0, 2),
+            expYear: `20${cardDetails.expiry.slice(3)}`,
+            isDefault: true
+          }
+        });
+      } catch (saveErr) {
+        console.warn('Could not save authorized test payment method:', saveErr.message);
+      }
+    }
+
     logReceiptEmail(newOrder);
 
     return res.status(201).json({
@@ -134,32 +155,10 @@ export const createOrder = async (req, res) => {
       data: newOrder
     });
   } catch (err) {
-    console.warn('Prisma order create failed, falling back:', err.message);
-    const fallbackNewOrder = {
-      id: orderId,
-      customerName: customerName || 'Valued Customer',
-      customerEmail,
-      userId: userId || null,
-      subtotal: Number(subtotal || totalAmount || 0),
-      discountAmount: Number(discountAmount || 0),
-      taxAmount: Number(taxAmount || 0),
-      totalAmount: Number(totalAmount || 0),
-      paymentMethod: paymentMethod || 'card',
-      cardLast4: cardLast4 || '4242',
-      isSubscription: Boolean(isSubscription),
-      receiptEmailed: false,
-      status: 'confirmed',
-      items,
-      createdAt: new Date().toISOString()
-    };
-
-    logReceiptEmail(fallbackNewOrder);
-
-    return res.status(201).json({
-      success: true,
-      message: 'Order created successfully; receipt generated locally (email delivery is not configured)',
-      receiptEmailed: false,
-      data: fallbackNewOrder
+    console.error('Authorized payment could not be recorded as an order:', err.message);
+    return res.status(503).json({
+      success: false,
+      message: 'Payment was authorized, but the order could not be saved. No real card was charged; please retry.'
     });
   }
 };

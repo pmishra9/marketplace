@@ -107,6 +107,7 @@ Creates a new product in the catalog.
 - **Method**: `POST`
 - **Path**: `/api/products`
 - **Headers**: `Content-Type: application/json`
+- Optional `upc`: 12-digit UPC-A with a valid check digit; spaces and hyphens are removed before storage.
 - **Body**:
   ```json
   {
@@ -155,7 +156,9 @@ Submits customer orders from the cart.
 
 - **Method**: `POST`
 - **Path**: `/api/orders`
-- **Headers**: `Content-Type: application/json`
+- **Headers**: `Content-Type: application/json`, `Authorization: Bearer <JWT>` (required)
+- A signed-in account is mandatory. The signed-in account supplies the customer name, email, and required user ID; matching fields sent in the body are ignored.
+- In local development, use `paymentType: "new"` with `cardDetails: { "number": "4242424242424242", "expiry": "12/30", "cvc": "123" }`, or select a saved test payment method with `paymentType: "saved"` and `savedPaymentId`. Only the allowlisted Visa test number is approved. `PAYMENT_MODE=mock` is local-only and rejected when `NODE_ENV=production`.
 - **Body**:
   ```json
   {
@@ -178,6 +181,9 @@ Submits customer orders from the cart.
       "customerEmail": "jane@example.com",
       "items": [...],
       "totalAmount": 299.99,
+      "paymentProvider": "local-mock",
+      "paymentReference": "mock_<id>",
+      "paymentStatus": "authorized",
       "status": "confirmed",
       "receiptEmailed": false,
       "createdAt": "2026-10-18T16:30:00.000Z"
@@ -192,6 +198,7 @@ Retrieves existing orders.
 
 - **Method**: `GET`
 - **Path**: `/api/orders`
+- **Authentication**: `Authorization: Bearer <JWT>` (required; only returns the signed-in customer's orders)
 - **Response**:
   ```json
   {
@@ -231,14 +238,28 @@ Enables customer sign-up and sign-in during the checkout flow.
 - **Body**: `{ "username": "elena", "password": "pass" }` (email is also accepted in the `username` field)
 
 The development seed login is `rabi` / `rabi`. Passwords are stored as scrypt hashes.
+Successful signup and signin responses include a seven-day JWT `token`. Send it in the `Authorization` header to use protected endpoints. `GET /api/auth/me` returns the current user, and `POST /api/auth/signout` invalidates that user's access tokens. The saved-payment read endpoint requires authentication and the `:userId` must match the signed-in user. Payment methods are saved only after a successful checkout authorization.
 
 ---
 
-### 10. Saved Payment Methods
-Retrieves and saves customer payment methods.
+### 10. Product Reviews
 
-- **Method**: `GET` / `POST`
+- **Method**: `GET`
+- **Path**: `/api/reviews/products/:productId`
+- Publicly returns written reviews. When sent a valid bearer token, also returns whether the signed-in customer has purchased the product and may review it.
+
+- **Method**: `POST`
+- **Path**: `/api/reviews/products/:productId`
+- **Headers**: `Authorization: Bearer <JWT>` and `Content-Type: application/json`
+- **Body**: `{ "rating": 5, "title": "Great", "body": "A full review" }`
+- Requires an eligible order for the product. Customers can post one review per product. Ratings are not aggregated into the product's summary rating.
+
+---
+### 11. Saved Payment Methods
+Retrieves the signed-in customer's saved payment methods.
+
+- **Method**: `GET`
 - **Path**: `/api/auth/users/:userId/payments`
 
-The current order controller writes a formatted receipt to the backend log. It does not send email, and `receiptEmailed` remains `false` until an email provider is integrated.
+The backend stores only the payment provider, mock authorization reference, authorization status, and last four digits. It never stores the submitted card number or CVC. The current order controller writes a formatted receipt to the backend log. It does not send email, and `receiptEmailed` remains `false` until an email provider is integrated.
 

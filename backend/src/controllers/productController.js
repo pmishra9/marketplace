@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { products as fallbackProducts, categories as fallbackCategories, brands as fallbackBrands } from '../data/mockData.js';
+import { normalizeUpc } from '../utils/upc.js';
 
 const prisma = new PrismaClient();
 
@@ -130,12 +131,17 @@ export const getBrands = async (_req, res) => {
 
 export const createProduct = async (req, res) => {
   const { title, price, brand, category, description, image, stock, variants, discountPercent } = req.body;
+  const upc = normalizeUpc(req.body.upc);
 
   if (!title || price === undefined) {
     return res.status(400).json({
       success: false,
       message: 'Product title and price are required'
     });
+  }
+
+  if (upc === undefined) {
+    return res.status(400).json({ success: false, message: 'UPC must be a valid 12-digit UPC-A code.' });
   }
 
   const newId = `prod-${Date.now().toString().slice(-4)}`;
@@ -145,6 +151,7 @@ export const createProduct = async (req, res) => {
       data: {
         id: newId,
         title,
+        upc,
         brand: brand || 'Nexus',
         description: description || '',
         price: Number(price),
@@ -163,24 +170,14 @@ export const createProduct = async (req, res) => {
 
     return res.status(201).json({ success: true, data: newProduct });
   } catch (err) {
-    console.warn('Prisma create failed, falling back:', err.message);
-    const fallbackItem = {
-      id: newId,
-      title,
-      brand: brand || 'Nexus',
-      description: description || '',
-      price: Number(price),
-      originalPrice: Number(price),
-      discountPercent: Number(discountPercent || 0),
-      category: category || 'accessories',
-      rating: 5.0,
-      reviewsCount: 1,
-      stock: stock !== undefined ? Number(stock) : 10,
-      badge: 'New',
-      image: image || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&q=80',
-      variants: variants || [],
-      featured: false
-    };
-    return res.status(201).json({ success: true, data: fallbackItem });
+    if (err.code === 'P2002') {
+      const isUpcConflict = String(err.meta?.target || '').toLowerCase().includes('upc');
+      return res.status(409).json({
+        success: false,
+        message: isUpcConflict ? 'A product with this UPC already exists.' : 'A product with this ID already exists.'
+      });
+    }
+    console.error('Product could not be stored:', err.message);
+    return res.status(503).json({ success: false, message: 'The product catalog is unavailable. Please try again.' });
   }
 };

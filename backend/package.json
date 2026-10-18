@@ -10,11 +10,13 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "node prisma/seed.js",
     "db:seed:auth": "node prisma/seedAuthUser.js",
-    "db:reset": "prisma db push --force-reset && node prisma/seed.js"
+    "db:backfill:order-owners": "node prisma/backfillOrderOwners.js",
+    "db:reset": "prisma migrate reset --force"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",

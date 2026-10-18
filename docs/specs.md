@@ -41,7 +41,7 @@ Email the receipt to the customer
 
 ## Current implementation gaps
 
-- Checkout validates account and card-shaped input, then creates a demo order. It does not charge a payment method; a payment provider is still required.
+- Local checkout authorizes only the whitelisted test card `4242 4242 4242 4242` (future expiry and any 3-digit CVC). This mock mode is disabled in production and does not charge or store a real card number. A Stripe test-mode integration is still required for provider-backed payment testing.
 - The backend generates and logs a receipt preview. It does not deliver email; an email provider is still required.
 - Customer sign-in is held in frontend memory and is lost on reload. A server-backed session or token flow is still required for persistent sign-in.
 - Product search, relevance sorting, brand and discount filters, variants, cart, and the checkout summary are implemented in the storefront. The “Relevance” filter wording above is ambiguous because relevance is a sort mode, not a separate filter.

@@ -1,5 +1,5 @@
 import express from 'express';
-import AdminJS from 'adminjs';
+import AdminJS, { ValidationError } from 'adminjs';
 import * as AdminJSExpress from '@adminjs/express';
 import { Database, Resource } from '@adminjs/prisma';
 import { PrismaClient, Prisma } from '@prisma/client';
@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { normalizeUpc } from '../../backend/src/utils/upc.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,6 +17,18 @@ const PORT = Number(process.env.ADMIN_PORT) || 3001;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'marketplace-admin-secret-session-key-dev';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@marketplace.local';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminsecret';
+
+const validateProductUpc = async (request) => {
+  if (!request.payload || !Object.prototype.hasOwnProperty.call(request.payload, 'upc')) return request;
+  const normalizedUpc = normalizeUpc(request.payload.upc);
+  if (normalizedUpc === undefined) {
+    throw new ValidationError({ upc: { message: 'Enter a valid 12-digit UPC-A code with a correct check digit.' } });
+  }
+  return {
+    ...request,
+    payload: { ...request.payload, upc: normalizedUpc }
+  };
+};
 
 const startAdminServer = async () => {
   const app = express();
@@ -30,7 +43,13 @@ const startAdminServer = async () => {
   const resources = models.map((model) => ({
     resource: new Resource({ model, client: prisma }),
     options: {
-      navigation: { name: 'Marketplace DB' }
+      navigation: { name: 'Marketplace DB' },
+      ...(model.name === 'Product' ? {
+        actions: {
+          new: { before: validateProductUpc },
+          edit: { before: validateProductUpc }
+        }
+      } : {})
     }
   }));
 

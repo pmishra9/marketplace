@@ -168,6 +168,22 @@ export const users = [
         isDefault: false
       }
     ]
+  },
+  {
+    id: 'user-002',
+    name: 'Marcus Sterling',
+    username: 'marcus',
+    email: 'marcus.s@example.com',
+    password: 'password123',
+    savedPayments: []
+  },
+  {
+    id: 'user-003',
+    name: 'Test Customer',
+    username: 'testcustomer',
+    email: 'customer@example.com',
+    password: 'password123',
+    savedPayments: []
   }
 ];
 

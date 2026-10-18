@@ -13,12 +13,12 @@ npm install
 # 2. Configure local environment files and PostgreSQL credentials
 cp backend/.env.example backend/.env
 cp admin/.env.example admin/.env
-# Edit DATABASE_URL in both files for your local PostgreSQL role
+# Edit DATABASE_URL in both files for your local PostgreSQL role; set a private JWT_SECRET in backend/.env
 
-# 3. Reset & populate the marketplace database with dummy data
+# 3. Reset & populate a fresh local demo database
 npm run db:reset
 
-# 4. Start all services concurrently
+# 4. Start all services (pending migrations are applied first)
 npm run dev
 ```
 
@@ -55,10 +55,18 @@ Category selection, product detail links, and checkout update the browser URL. T
 | `npm run db:reset` | **Wipes & re-imports all dummy data** into `psql marketplace` |
 | `npm run db:seed` | Imports dummy categories, products, and orders into PostgreSQL |
 | `npm run db:seed:auth` | Adds or refreshes the development customer login without resetting other data |
-| `npm run db:push` | Pushes the Prisma schema to sync tables in PostgreSQL |
+| `npm run db:migrate` | Applies checked-in Prisma migrations to PostgreSQL |
+| `npm run db:migrate:dev` | Creates a migration from schema changes during development |
 | `npm run db:generate` | Re-generates the `@prisma/client` code |
 
-The development-only customer credentials are **username:** `rabi`, **password:** `rabi`. Run `npm run db:push` and then `npm run db:seed:auth` to update an existing database; `npm run db:reset` also includes this user.
+The development-only customer credentials are **username:** `rabi`, **password:** `rabi`. Run `npm run db:migrate` and then `npm run db:seed:auth` to update an existing database; `npm run db:reset` also includes this user. Sign-up and sign-in return a seven-day JWT access token; protected API requests use `Authorization: Bearer <token>`. Set `JWT_SECRET` to a strong random value outside local development. Signing out increments the user's token version and invalidates existing tokens.
+
+Product reviews are available on product pages after a signed-in customer has a confirmed, shipped, delivered, or completed order for that product. Each customer can post one review per product. Reviews are stored and shown individually; product rating aggregates are not recalculated yet. Product UPC values are optional, unique 12-digit UPC-A codes with a verified check digit.
+
+Orders must belong to a signed-in customer. The database requires every order to reference a user.
+For an existing database with no Prisma migration history that still has the original schema, mark the baseline as applied once with `npx prisma migrate resolve --applied 20261018182000_init --schema backend/prisma/schema.prisma`, then run `npm run db:migrate`. The feature migration links orders to existing accounts by email and stops safely if any owner remains unknown; for known demo fixtures, run `npm run db:backfill:order-owners` first. If the database was already synchronized to the latest schema with `db push`, mark both migrations as applied before running `npm run db:migrate`. `npm run db:reset` recreates the schema and seeds orders with owners; it deletes existing database contents.
+
+Local checkout authorizes only the test card `4242 4242 4242 4242` with a future expiry and any 3-digit CVC. This mock authorization is disabled in production, does not charge a card, and does not store the card number or CVC. Stripe test mode is still needed for provider-backed payment testing.
 
 ---
 
@@ -93,6 +101,8 @@ Individual service scripts (can be executed from the root directory):
 - `npm run dev:market` — Starts the Vite React frontend
 - `npm run build` — Compiles production bundles
 
+For local startup, run `npm run dev`; it applies pending migrations before starting the services. To start only the backend, use `npm run db:migrate && npm run dev:backend`.
+
 ---
 
 ## 📋 Changelog
@@ -101,8 +111,8 @@ Individual service scripts (can be executed from the root directory):
 - **Specs & Documentation**: Linked [docs/specs.md](docs/specs.md) to [docs/README.md](docs/README.md) and root [README.md](README.md).
 - **Search, Sort & Filters**: Added sorting by Relevance, Price Low-to-High, Price High-to-Low, and Name (A-Z). Added brand filters and discount-only toggle.
 - **Product Display Page (PDP)**: Implemented dedicated modal PDP displaying high-res imagery, description, brand, interactive variant selector, quantity stepper, "Add to Cart", "Subscribe & Save 10%", and direct "Checkout Now" actions.
-- **Authentication**: Added customer Sign Up & Sign In flows and saved payment methods. Customer login is held in frontend memory and does not persist across reloads.
-- **Checkout Flow**: Added cart item variants, price breakdown with discounts, estimated sales tax, saved payment method selection or new card entry, and an order confirmation prompt. Receipt delivery is currently simulated by writing the receipt to the backend log; configure an email provider before claiming email delivery.
+- **Authentication**: Added customer Sign Up & Sign In flows, JWT sessions, and saved payment methods.
+- **Checkout Flow**: Added cart item variants, price breakdown with discounts, estimated sales tax, saved payment method selection or new card entry, and a local allowlisted test-card authorization flow. Receipt delivery is currently simulated by writing the receipt to the backend log; configure an email provider before claiming email delivery.
 
 ### [1.2.0] - PostgreSQL & Prisma Integration with Dummy Reset
 - **Database**: Configured PostgreSQL (`psql marketplace`) via Prisma ORM.

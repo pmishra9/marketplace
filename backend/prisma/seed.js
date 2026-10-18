@@ -43,6 +43,7 @@ export async function resetAndSeedDatabase() {
         data: {
           id: prod.id,
           title: prod.title,
+          upc: prod.upc || null,
           brand: prod.brand || 'Nexus',
           description: prod.description,
           price: prod.price,
@@ -110,11 +111,16 @@ export async function resetAndSeedDatabase() {
     // 5. Seed Orders
     console.log('📦 Seeding orders...');
     for (const ord of orders) {
+      const orderUser = await prisma.user.findUnique({ where: { email: ord.customerEmail } });
+      if (!orderUser) {
+        throw new Error(`Cannot seed order ${ord.id}: no user exists for ${ord.customerEmail}`);
+      }
       const createdOrder = await prisma.order.create({
         data: {
           id: ord.id,
           customerName: ord.customerName,
           customerEmail: ord.customerEmail,
+          userId: orderUser.id,
           subtotal: ord.subtotal || ord.totalAmount,
           discountAmount: ord.discountAmount || 0,
           taxAmount: ord.taxAmount || 0,

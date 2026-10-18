@@ -69,5 +69,5 @@ This document details the design choices, service communications, and integratio
 ## Technical Debt & Recommended Next Steps
 
 1. **Email Delivery**: Connect a mail provider so generated receipts are delivered to customers; the current backend writes receipt details to its log only.
-2. **Payment Processing**: Connect a payment provider; checkout currently validates card-shaped input and records a demo order without charging a card.
+2. **Payment Processing**: Local development supports a server-side mock authorization for the whitelisted test Visa `4242 4242 4242 4242`. It stores only the last four digits and a mock reference. Integrate Stripe test mode before provider-backed payment testing; mock payments are rejected when `NODE_ENV=production`.
 3. **Customer Sessions**: Replace the demo account state with a server-backed session or token flow so sign-in persists safely across reloads.

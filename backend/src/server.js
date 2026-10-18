@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import productRoutes from './routes/productRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // Root fallback
 app.get('/', (_req, res) => {

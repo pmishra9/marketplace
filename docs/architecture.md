@@ -35,14 +35,14 @@ This document details the design choices, service communications, and integratio
 ## Component Breakdown
 
 ### 1. `backend/` (Node.js REST Service)
-- **Runtime**: Node.js (v18+ / v20+ / v23)
+- **Runtime**: Node.js (v20.19+ or v22.12+; required by Vite 8)
 - **Framework**: Express.js
 - **Module System**: ECMAScript Modules (`"type": "module"`)
 - **Key Modules**:
   - `src/server.js`: Server lifecycle, CORS, body parsing, health checks, route mounting.
   - `src/controllers/productController.js`: Full-text search filtering, category sorting, product retrieval and creation.
   - `src/controllers/orderController.js`: Order creation and history.
-  - `src/data/mockData.js`: In-memory persistence baseline, easily replaceable with PostgreSQL/MongoDB/SQLite via Prisma or Mongoose.
+  - `src/data/mockData.js`: Fallback catalog and order data used when database calls fail.
 
 ### 2. `admin/` (AdminJS Management Panel)
 - **Framework**: AdminJS v7 + `@adminjs/express`
@@ -59,7 +59,7 @@ This document details the design choices, service communications, and integratio
 - **Key Features**:
   - Live search with instant filtering.
   - Category selection pills (All, Electronics, Audio, Wearables, Accessories, Smart Home).
-  - Multi-criteria sorting (Price asc/desc, top rated, featured).
+  - Search relevance ranking, price ascending/descending, and name sorting.
   - Slide-out Cart Drawer with item increment/decrement and live subtotal calculations.
   - Checkout dispatching orders to backend `/api/orders`.
   - Resilience: Automatically falls back to seed data if backend is offline.
@@ -68,6 +68,6 @@ This document details the design choices, service communications, and integratio
 
 ## Technical Debt & Recommended Next Steps
 
-1. **Database Adapter**: Connect `@adminjs/prisma` or `@adminjs/mongoose` to link AdminJS directly with real PostgreSQL/SQLite/MongoDB models.
-2. **Shared Package**: If TypeScript or shared interfaces are desired, add a `packages/shared` workspace with product/order types.
-3. **Authentication Token Flow**: Implement JWT / OAuth2 for client frontend accounts.
+1. **Email Delivery**: Connect a mail provider so generated receipts are delivered to customers; the current backend writes receipt details to its log only.
+2. **Payment Processing**: Connect a payment provider; checkout currently validates card-shaped input and records a demo order without charging a card.
+3. **Customer Sessions**: Replace the demo account state with a server-backed session or token flow so sign-in persists safely across reloads.

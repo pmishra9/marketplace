@@ -38,3 +38,10 @@ Allow to enter the payment information or select the payment if saved before
 Prompt for the confirmation to order
 Show the confirmation page
 Email the receipt to the customer
+
+## Current implementation gaps
+
+- Checkout validates account and card-shaped input, then creates a demo order. It does not charge a payment method; a payment provider is still required.
+- The backend generates and logs a receipt preview. It does not deliver email; an email provider is still required.
+- Customer sign-in is held in frontend memory and is lost on reload. A server-backed session or token flow is still required for persistent sign-in.
+- Product search, relevance sorting, brand and discount filters, variants, cart, and the checkout summary are implemented in the storefront. The “Relevance” filter wording above is ambiguous because relevance is a sort mode, not a separate filter.

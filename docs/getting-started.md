@@ -6,7 +6,7 @@ This guide covers environment prerequisites, initial installation, running devel
 
 ## Prerequisites
 
-- **Node.js**: v18.0.0 or later (LTS recommended, tested on Node 20 & Node 23)
+- **Node.js**: v20.19.0+ or v22.12.0+ (required by Vite 8; Node 23 also works)
 - **npm**: v8.0.0 or later
 
 Verify versions in your terminal:
@@ -47,7 +47,7 @@ cp admin/.env.example admin/.env
 ### Key Defaults
 | Setting | Variable | Default | Notes |
 |---|---|---|---|
-| Database Connection | `DATABASE_URL` | `postgresql://rabi@localhost:5432/marketplace` | Connects to local `psql marketplace` |
+| Database Connection | `DATABASE_URL` | Set in `backend/.env` | Use the PostgreSQL role and password configured on your machine |
 | Backend Port | `PORT` (in `backend/.env`) | `4000` | Avoids port 5000 (macOS AirPlay collision) |
 | Admin Port | `ADMIN_PORT` (in `admin/.env`) | `3001` | Admin portal server |
 | Admin User | `ADMIN_EMAIL` | `admin@marketplace.local` | Initial admin login |
@@ -59,6 +59,17 @@ cp admin/.env.example admin/.env
 ## 🗄️ PostgreSQL Database & Dummy Import
 
 The monorepo uses Prisma ORM connected to your local `marketplace` database (`psql marketplace`).
+
+After copying `backend/.env.example`, replace `USER` and `PASSWORD` in `DATABASE_URL` with your local PostgreSQL credentials. The template deliberately does not assume a machine-specific database role.
+
+The development customer login is `rabi` / `rabi`. After syncing the schema, seed or refresh just this account with:
+
+```bash
+npm run db:push
+npm run db:seed:auth
+```
+
+The full `npm run db:reset` flow also creates the account along with the sample catalog and orders.
 
 ### 1. Initialize / Push Schema to DB
 Synchronize the Prisma models (`Category`, `Product`, `Order`, `OrderItem`) to PostgreSQL:

@@ -3,10 +3,10 @@ import { orders as fallbackOrders } from '../data/mockData.js';
 
 const prisma = new PrismaClient();
 
-// Helper to simulate emailing receipt to customer
-const sendReceiptEmail = (order) => {
+// Development-only receipt output. A mail provider is not configured.
+const logReceiptEmail = (order) => {
   console.log('\n======================================================');
-  console.log(`📧 [EMAIL SERVICE] Sending Receipt to: ${order.customerEmail}`);
+  console.log(`🧾 [RECEIPT PREVIEW] Prepared for: ${order.customerEmail}`);
   console.log(`📋 Order Reference: ${order.id}`);
   console.log(`👤 Customer: ${order.customerName}`);
   console.log(`💳 Payment: ${order.paymentMethod} (ending in ${order.cardLast4 || '4242'})`);
@@ -20,7 +20,7 @@ const sendReceiptEmail = (order) => {
   order.items?.forEach((item, idx) => {
     console.log(`  ${idx + 1}. Product: ${item.productId} (${item.variant || 'Standard'}) x ${item.quantity} @ $${item.price}`);
   });
-  console.log('Status: Email successfully dispatched to customer inbox.');
+  console.log('Status: Receipt generated locally; no email was sent.');
   console.log('======================================================\n');
 };
 
@@ -109,7 +109,7 @@ export const createOrder = async (req, res) => {
         paymentMethod: paymentMethod || 'card',
         cardLast4: cardLast4 || '4242',
         isSubscription: Boolean(isSubscription),
-        receiptEmailed: true,
+        receiptEmailed: false,
         status: 'confirmed',
         items: {
           create: items.map((i) => ({
@@ -125,13 +125,12 @@ export const createOrder = async (req, res) => {
       }
     });
 
-    // Simulate sending email receipt
-    sendReceiptEmail(newOrder);
+    logReceiptEmail(newOrder);
 
     return res.status(201).json({
       success: true,
-      message: 'Order created successfully and receipt emailed',
-      receiptEmailed: true,
+      message: 'Order created successfully; receipt generated locally (email delivery is not configured)',
+      receiptEmailed: false,
       data: newOrder
     });
   } catch (err) {
@@ -148,18 +147,18 @@ export const createOrder = async (req, res) => {
       paymentMethod: paymentMethod || 'card',
       cardLast4: cardLast4 || '4242',
       isSubscription: Boolean(isSubscription),
-      receiptEmailed: true,
+      receiptEmailed: false,
       status: 'confirmed',
       items,
       createdAt: new Date().toISOString()
     };
 
-    sendReceiptEmail(fallbackNewOrder);
+    logReceiptEmail(fallbackNewOrder);
 
     return res.status(201).json({
       success: true,
-      message: 'Order created successfully and receipt emailed',
-      receiptEmailed: true,
+      message: 'Order created successfully; receipt generated locally (email delivery is not configured)',
+      receiptEmailed: false,
       data: fallbackNewOrder
     });
   }

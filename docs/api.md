@@ -40,12 +40,15 @@ Retrieves the list of products with optional query parameters for search, catego
 - **Method**: `GET`
 - **Path**: `/api/products`
 - **Query Parameters**:
-  - `q` *(string, optional)*: Filter by title, description, or category keyword.
+  - `q` *(string, optional)*: Filter by title, description, brand, or category keyword.
   - `category` *(string, optional)*: Filter by category ID (e.g. `audio`, `wearables`, `electronics`).
+  - `brand` *(string, optional)*: Filter by exact brand name.
+  - `discountOnly` *(boolean, optional)*: Set to `true` to return discounted products.
   - `sort` *(string, optional)*:
     - `price_asc`: Sort by lowest price first.
     - `price_desc`: Sort by highest price first.
-    - `rating`: Sort by highest customer rating first.
+    - `name_asc`: Sort by product name A to Z.
+    - `rating`: Sort by highest customer rating first (API only; not shown in the storefront sort menu).
 - **Example Request**:
   ```bash
   curl "http://localhost:4000/api/products?category=audio&sort=rating"
@@ -168,14 +171,15 @@ Submits customer orders from the cart.
   ```json
   {
     "success": true,
-    "message": "Order created successfully",
+    "message": "Order created successfully; receipt generated locally (email delivery is not configured)",
     "data": {
       "id": "ORD-7812",
       "customerName": "Jane Doe",
       "customerEmail": "jane@example.com",
       "items": [...],
       "totalAmount": 299.99,
-      "status": "pending",
+      "status": "confirmed",
+      "receiptEmailed": false,
       "createdAt": "2026-10-18T16:30:00.000Z"
     }
   }
@@ -219,11 +223,14 @@ Enables customer sign-up and sign-in during the checkout flow.
 
 - **Method**: `POST`
 - **Path**: `/api/auth/signup`
-- **Body**: `{ "name": "Elena Rostova", "email": "elena@example.com", "password": "pass" }`
+- **Body**: `{ "name": "Elena Rostova", "username": "elena", "email": "elena@example.com", "password": "pass" }`
+- Usernames are unique, case-insensitive, and 3–32 letters, numbers, or underscores.
 
 - **Method**: `POST`
 - **Path**: `/api/auth/signin`
-- **Body**: `{ "email": "elena@example.com", "password": "pass" }`
+- **Body**: `{ "username": "elena", "password": "pass" }` (email is also accepted in the `username` field)
+
+The development seed login is `rabi` / `rabi`. Passwords are stored as scrypt hashes.
 
 ---
 
@@ -232,4 +239,6 @@ Retrieves and saves customer payment methods.
 
 - **Method**: `GET` / `POST`
 - **Path**: `/api/auth/users/:userId/payments`
+
+The current order controller writes a formatted receipt to the backend log. It does not send email, and `receiptEmailed` remains `false` until an email provider is integrated.
 

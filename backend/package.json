@@ -13,6 +13,7 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "node prisma/seed.js",
+    "db:seed:auth": "node prisma/seedAuthUser.js",
     "db:reset": "prisma db push --force-reset && node prisma/seed.js"
   },
   "dependencies": {

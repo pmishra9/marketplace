@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 // Built-in initial catalog fallback
 const INITIAL_PRODUCTS = [
@@ -138,9 +138,22 @@ const CATEGORIES = [
 
 const BRANDS = ['all', 'Aura', 'Titan', 'Lumix', 'Vertex', 'Onyx', 'Pulse'];
 
+const slugify = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const productPath = (product) => `/products/${encodeURIComponent(product.id)}/${slugify(product.title)}`;
+
+const parseRoute = (pathname) => {
+  const parts = pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  if (parts[0] === 'categories' && parts[1]) return { type: 'category', category: parts[1] };
+  if (parts[0] === 'products' && parts[1]) return { type: 'product', productId: parts[1] };
+  if (parts[0] === 'checkout') return { type: 'checkout' };
+  return { type: 'home' };
+};
+
 export default function App() {
   // Catalog State
   const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [route, setRoute] = useState(() => parseRoute(window.location.pathname));
+  const lastNonCheckoutPath = useRef(window.location.pathname === '/checkout' ? '/' : window.location.pathname);
   const [activeCategory, setActiveCategory] = useState('all');
   const [activeBrand, setActiveBrand] = useState('all');
   const [onlyDiscounted, setOnlyDiscounted] = useState(false);
@@ -160,36 +173,12 @@ export default function App() {
 
   // Checkout & Customer Flow State
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState({
-    id: 'user-001',
-    name: 'Elena Rostova',
-    email: 'elena.rostova@example.com',
-    savedPayments: [
-      {
-        id: 'pay-001',
-        cardBrand: 'Visa',
-        last4: '4242',
-        cardholderName: 'Elena Rostova',
-        expMonth: '12',
-        expYear: '28',
-        isDefault: true
-      },
-      {
-        id: 'pay-002',
-        cardBrand: 'Mastercard',
-        last4: '8812',
-        cardholderName: 'Elena Rostova',
-        expMonth: '08',
-        expYear: '27',
-        isDefault: false
-      }
-    ]
-  });
+  const [currentUser, setCurrentUser] = useState(null);
 
   const [authTab, setAuthTab] = useState('signup'); // 'signup' | 'signin' | 'authenticated'
-  const [authFormData, setAuthFormData] = useState({ name: '', email: '', password: '' });
-  const [paymentChoice, setPaymentChoice] = useState('saved'); // 'saved' | 'new'
-  const [selectedSavedCardId, setSelectedSavedCardId] = useState('pay-001');
+  const [authFormData, setAuthFormData] = useState({ name: '', username: '', email: '', password: '' });
+  const [paymentChoice, setPaymentChoice] = useState('new'); // 'saved' | 'new'
+  const [selectedSavedCardId, setSelectedSavedCardId] = useState('');
   const [newCardData, setNewCardData] = useState({
     number: '',
     cardholderName: '',
@@ -200,6 +189,23 @@ export default function App() {
   const [showConfirmPrompt, setShowConfirmPrompt] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+
+  const navigate = (path, replace = false) => {
+    if (window.location.pathname !== path) {
+      if (replace) window.history.replaceState({}, '', path);
+      else window.history.pushState({}, '', path);
+    }
+    setRoute(parseRoute(path));
+  };
+
+  const openCheckout = () => {
+    setConfirmedOrder(null);
+    navigate('/checkout');
+  };
+
+  const closeCheckout = () => {
+    navigate(lastNonCheckoutPath.current || '/', true);
+  };
 
   // Fetch live products from backend
   useEffect(() => {
@@ -213,6 +219,56 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const handlePopState = () => setRoute(parseRoute(window.location.pathname));
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (route.type !== 'checkout') {
+      lastNonCheckoutPath.current = window.location.pathname;
+    }
+    setIsCheckoutOpen(route.type === 'checkout');
+
+    if (route.type === 'category') {
+      setActiveCategory(route.category);
+    } else if (route.type === 'home') {
+      setActiveCategory('all');
+    }
+  }, [route]);
+
+  useEffect(() => {
+    if (route.type !== 'product') {
+      if (selectedProduct) setSelectedProduct(null);
+      return;
+    }
+    if (selectedProduct?.id === route.productId) return;
+
+    let cancelled = false;
+    const product = products.find((item) => item.id === route.productId);
+    const showProduct = (item) => {
+      if (!item || cancelled) return;
+      setSelectedProduct(item);
+      setPdpVariant(item.variants?.[0]?.name || 'Standard');
+      setPdpQuantity(1);
+      setIsSubscribedOption(false);
+    };
+
+    if (product) {
+      showProduct(product);
+    } else {
+      fetch(`/api/products/${encodeURIComponent(route.productId)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => showProduct(json?.data))
+        .catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [route, products, selectedProduct]);
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -220,15 +276,11 @@ export default function App() {
 
   // Open Product Display Page
   const openPDP = (product) => {
-    setSelectedProduct(product);
-    const initialVariant = product.variants?.[0]?.name || 'Standard';
-    setPdpVariant(initialVariant);
-    setPdpQuantity(1);
-    setIsSubscribedOption(false);
+    navigate(productPath(product));
   };
 
   const closePDP = () => {
-    setSelectedProduct(null);
+    navigate(activeCategory === 'all' ? '/' : `/categories/${encodeURIComponent(activeCategory)}`, true);
   };
 
   // Add to Cart handler
@@ -264,7 +316,7 @@ export default function App() {
     handleAddToCart(product, variantName, qty, isSub);
     closePDP();
     setIsCartOpen(false);
-    setIsCheckoutOpen(true);
+    openCheckout();
   };
 
   // Update Cart Quantities
@@ -286,44 +338,50 @@ export default function App() {
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     const endpoint = authTab === 'signup' ? '/api/auth/signup' : '/api/auth/signin';
+    const payload = authTab === 'signup'
+      ? authFormData
+      : { username: authFormData.username, password: authFormData.password };
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(authFormData)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (data.user) {
-        setCurrentUser(data.user);
-        showToast(`Welcome, ${data.user.name}!`);
-      } else {
-        // Fallback for local preview
-        setCurrentUser({
-          id: `user-${Date.now().toString().slice(-4)}`,
-          name: authFormData.name || authFormData.email.split('@')[0],
-          email: authFormData.email,
-          savedPayments: []
-        });
-        showToast('Account active!');
+      if (!res.ok || !data.user) {
+        throw new Error(data.message || 'Unable to authenticate. Please check your details and try again.');
       }
-    } catch {
-      setCurrentUser({
-        id: `user-${Date.now().toString().slice(-4)}`,
-        name: authFormData.name || authFormData.email.split('@')[0],
-        email: authFormData.email,
-        savedPayments: []
-      });
-      showToast('Account active!');
+      setCurrentUser(data.user);
+      setSelectedSavedCardId(data.user.savedPayments?.find((payment) => payment.isDefault)?.id || data.user.savedPayments?.[0]?.id || '');
+      setPaymentChoice(data.user.savedPayments?.length ? 'saved' : 'new');
+      showToast(`Welcome, ${data.user.name}!`);
+    } catch (error) {
+      showToast(error.message || 'Unable to reach the account service. Please try again.');
     }
   };
 
   // Order Placement
   const handleFinalOrderPlacement = async () => {
+    if (!currentUser) {
+      showToast('Sign in or create an account before placing your order.');
+      return;
+    }
+
+    const selectedCard = currentUser.savedPayments?.find((p) => p.id === selectedSavedCardId);
+    const cardNumber = newCardData.number.replace(/\D/g, '');
+    if (paymentChoice === 'saved' && !selectedCard) {
+      showToast('Choose a saved payment method or enter a new card.');
+      return;
+    }
+    if (paymentChoice === 'new' && (cardNumber.length < 12 || cardNumber.length > 19 || !/^\d{2}\/\d{2}$/.test(newCardData.exp) || !/^\d{3,4}$/.test(newCardData.cvc) || !newCardData.cardholderName.trim())) {
+      showToast('Enter a valid cardholder name, card number, expiry date, and CVC.');
+      return;
+    }
+
     setIsSubmittingOrder(true);
     setShowConfirmPrompt(false);
 
-    const selectedCard = currentUser?.savedPayments?.find((p) => p.id === selectedSavedCardId);
-    const cardLast4 = paymentChoice === 'saved' && selectedCard ? selectedCard.last4 : (newCardData.number.slice(-4) || '4242');
+    const cardLast4 = paymentChoice === 'saved' ? selectedCard.last4 : cardNumber.slice(-4);
     const paymentMethodName = paymentChoice === 'saved' ? `Saved Card (${selectedCard?.cardBrand || 'Card'})` : 'Credit Card';
 
     const orderPayload = {
@@ -343,14 +401,14 @@ export default function App() {
       paymentMethod: paymentMethodName,
       cardLast4,
       isSubscription: cart.some((i) => i.isSubscription),
-      savePayment: newCardData.saveForFuture,
-      cardDetails: {
+      savePayment: paymentChoice === 'new' && newCardData.saveForFuture,
+      cardDetails: paymentChoice === 'new' ? {
         brand: 'Visa',
         last4: cardLast4,
-        cardholderName: newCardData.cardholderName || currentUser?.name,
-        expMonth: '12',
-        expYear: '28'
-      }
+        cardholderName: newCardData.cardholderName || currentUser.name,
+        expMonth: newCardData.exp.slice(0, 2),
+        expYear: newCardData.exp.slice(3)
+      } : undefined
     };
 
     try {
@@ -360,23 +418,14 @@ export default function App() {
         body: JSON.stringify(orderPayload)
       });
       const data = await res.json();
-      const confirmed = data.data || {
-        ...orderPayload,
-        id: `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-        status: 'confirmed',
-        receiptEmailed: true
-      };
+      if (!res.ok || !data.data) {
+        throw new Error(data.message || 'The order could not be placed. Please try again.');
+      }
+      const confirmed = data.data;
       setConfirmedOrder(confirmed);
       setCart([]);
-    } catch {
-      const mockOrder = {
-        ...orderPayload,
-        id: `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-        status: 'confirmed',
-        receiptEmailed: true
-      };
-      setConfirmedOrder(mockOrder);
-      setCart([]);
+    } catch (error) {
+      showToast(error.message || 'Unable to reach the order service. Please try again.');
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -420,6 +469,28 @@ export default function App() {
       list.sort((a, b) => b.price - a.price);
     } else if (sortBy === 'name_asc') {
       list.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortBy === 'relevance') {
+      const query = searchQuery.trim().toLowerCase();
+      const relevanceScore = (product) => {
+        if (!query) return 0;
+        const title = String(product.title || '').toLowerCase();
+        const brand = String(product.brand || '').toLowerCase();
+        const category = String(product.category || '').toLowerCase();
+        const description = String(product.description || '').toLowerCase();
+        if (title === query) return 100;
+        if (title.startsWith(query)) return 80;
+        if (title.includes(query)) return 60;
+        if (brand.includes(query)) return 30;
+        if (category.includes(query)) return 20;
+        if (description.includes(query)) return 10;
+        return 0;
+      };
+
+      list.sort((a, b) =>
+        relevanceScore(b) - relevanceScore(a) ||
+        Number(b.featured) - Number(a.featured) ||
+        (b.rating || 0) - (a.rating || 0)
+      );
     }
 
     return list;
@@ -449,7 +520,15 @@ export default function App() {
       {/* Navigation Header */}
       <header className="navbar">
         <div className="nav-content">
-          <a href="#" className="brand-badge" id="brand-home-link">
+          <a
+            href="/"
+            className="brand-badge"
+            id="brand-home-link"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate('/');
+            }}
+          >
             <div className="brand-logo-glow">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
@@ -480,7 +559,7 @@ export default function App() {
               <button
                 className="user-account-badge"
                 onClick={() => {
-                  setIsCheckoutOpen(true);
+                  openCheckout();
                   setAuthTab('authenticated');
                 }}
                 title="Customer Profile & Saved Payments"
@@ -492,29 +571,13 @@ export default function App() {
               <button
                 className="user-account-badge"
                 onClick={() => {
-                  setIsCheckoutOpen(true);
+                  openCheckout();
                   setAuthTab('signin');
                 }}
               >
                 <span>Sign In</span>
               </button>
             )}
-
-            <a
-              id="admin-portal-link"
-              href="http://localhost:3001/admin"
-              target="_blank"
-              rel="noreferrer"
-              className="admin-link-btn"
-              title="AdminJS Console"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2"></rect>
-                <path d="M3 9h18"></path>
-                <path d="M9 21V9"></path>
-              </svg>
-              <span>Admin</span>
-            </a>
 
             <button
               id="cart-trigger-btn"
@@ -557,7 +620,7 @@ export default function App() {
             </div>
             <div className="hero-stat-pill">
               <span className="hero-stat-dot"></span>
-              <span>Automated Email Receipts</span>
+              <span>Itemized Order Receipts</span>
             </div>
           </div>
         </div>
@@ -568,14 +631,19 @@ export default function App() {
         {/* Category Pills Row */}
         <div className="category-pills-row">
           {CATEGORIES.map((cat) => (
-            <button
+            <a
               key={cat.id}
               id={`category-pill-${cat.id}`}
+              href={cat.id === 'all' ? '/' : `/categories/${encodeURIComponent(cat.id)}`}
               className={`category-pill ${activeCategory === cat.id ? 'active' : ''}`}
-              onClick={() => setActiveCategory(cat.id)}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                event.preventDefault();
+                navigate(cat.id === 'all' ? '/' : `/categories/${encodeURIComponent(cat.id)}`);
+              }}
             >
               <span>{cat.name}</span>
-            </button>
+            </a>
           ))}
         </div>
 
@@ -678,16 +746,19 @@ export default function App() {
                       )}
                     </div>
 
-                    <button
+                    <a
+                      href={productPath(product)}
                       id={`pdp-view-btn-${product.id}`}
                       className="add-btn"
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                        e.preventDefault();
                         openPDP(product);
                       }}
                     >
                       <span>View & Customize</span>
-                    </button>
+                    </a>
                   </div>
                 </div>
               </div>
@@ -891,8 +962,7 @@ export default function App() {
                     className="checkout-btn"
                     onClick={() => {
                       setIsCartOpen(false);
-                      setIsCheckoutOpen(true);
-                      setConfirmedOrder(null);
+                      openCheckout();
                     }}
                   >
                     Proceed to Checkout • ${cartTotals.total.toFixed(2)}
@@ -908,13 +978,13 @@ export default function App() {
           Checkout Page & Flow Modal
           ========================================================================== */}
       {isCheckoutOpen && (
-        <div className="checkout-backdrop" onClick={() => !isSubmittingOrder && setIsCheckoutOpen(false)}>
+        <div className="checkout-backdrop" onClick={() => !isSubmittingOrder && closeCheckout()}>
           <div className="checkout-modal" onClick={(e) => e.stopPropagation()}>
             <div className="checkout-header">
               <h2>Checkout & Payment</h2>
               <button
                 className="close-btn"
-                onClick={() => setIsCheckoutOpen(false)}
+                onClick={closeCheckout}
                 disabled={isSubmittingOrder}
               >
                 ✕
@@ -934,7 +1004,7 @@ export default function App() {
                 {/* Email Receipt Confirmation Badge */}
                 <div className="receipt-email-pill">
                   <span>✉️</span>
-                  <span>Receipt emailed to: <strong>{confirmedOrder.customerEmail}</strong></span>
+                  <span>{confirmedOrder.receiptEmailed ? 'Receipt emailed to:' : 'Receipt prepared for:'} <strong>{confirmedOrder.customerEmail}</strong></span>
                 </div>
 
                 <div className="receipt-items-table">
@@ -964,17 +1034,12 @@ export default function App() {
                 <button
                   className="checkout-btn"
                   onClick={() => {
-                    setIsCheckoutOpen(false);
+                    closeCheckout();
                     setConfirmedOrder(null);
                   }}
                 >
                   Continue Shopping
                 </button>
-              </div>
-            ) : cart.length === 0 ? (
-              <div className="empty-state" style={{ margin: 'auto' }}>
-                <h3>No items in checkout</h3>
-                <p>Add products to your cart before proceeding.</p>
               </div>
             ) : (
               <div className="checkout-content-grid">
@@ -987,7 +1052,10 @@ export default function App() {
                       {currentUser && (
                         <button
                           style={{ background: 'none', color: 'var(--accent-cyan)', fontSize: '0.8rem', cursor: 'pointer' }}
-                          onClick={() => setCurrentUser(null)}
+                          onClick={() => {
+                            setCurrentUser(null);
+                            setAuthTab('signin');
+                          }}
                         >
                           Switch Account
                         </button>
@@ -1025,20 +1093,38 @@ export default function App() {
                             </div>
                           )}
                           <div className="input-field-group">
-                            <label>Email Address</label>
+                            <label>{authTab === 'signup' ? 'Username' : 'Username or Email'}</label>
                             <input
-                              type="email"
+                              type="text"
                               required
-                              placeholder="elena.rostova@example.com"
-                              value={authFormData.email}
-                              onChange={(e) => setAuthFormData({ ...authFormData, email: e.target.value })}
+                              autoComplete="username"
+                              minLength={authTab === 'signup' ? 3 : undefined}
+                              maxLength={authTab === 'signup' ? 32 : 254}
+                              pattern={authTab === 'signup' ? '[A-Za-z0-9_]{3,32}' : undefined}
+                              placeholder={authTab === 'signup' ? 'rabi' : 'rabi'}
+                              value={authFormData.username}
+                              onChange={(e) => setAuthFormData({ ...authFormData, username: e.target.value })}
                             />
                           </div>
+                          {authTab === 'signup' && (
+                            <div className="input-field-group">
+                              <label>Email Address</label>
+                              <input
+                                type="email"
+                                required
+                                autoComplete="email"
+                                placeholder="you@example.com"
+                                value={authFormData.email}
+                                onChange={(e) => setAuthFormData({ ...authFormData, email: e.target.value })}
+                              />
+                            </div>
+                          )}
                           <div className="input-field-group">
                             <label>Password</label>
                             <input
                               type="password"
                               required
+                              autoComplete={authTab === 'signup' ? 'new-password' : 'current-password'}
                               placeholder="••••••••"
                               value={authFormData.password}
                               onChange={(e) => setAuthFormData({ ...authFormData, password: e.target.value })}
@@ -1063,7 +1149,7 @@ export default function App() {
                   </div>
 
                   {/* Step 2: Payment Method */}
-                  <div className="checkout-section-block">
+                  {cart.length > 0 ? <div className="checkout-section-block">
                     <div className="checkout-section-title">
                       <span>2. Payment Information</span>
                     </div>
@@ -1123,6 +1209,7 @@ export default function App() {
                           <label>Cardholder Name</label>
                           <input
                             type="text"
+                            autoComplete="cc-name"
                             placeholder="Elena Rostova"
                             value={newCardData.cardholderName}
                             onChange={(e) => setNewCardData({ ...newCardData, cardholderName: e.target.value })}
@@ -1132,7 +1219,9 @@ export default function App() {
                           <label>Card Number</label>
                           <input
                             type="text"
-                            placeholder="4242 •••• •••• 4242"
+                            inputMode="numeric"
+                            autoComplete="cc-number"
+                            placeholder="4242 4242 4242 4242"
                             value={newCardData.number}
                             onChange={(e) => setNewCardData({ ...newCardData, number: e.target.value })}
                           />
@@ -1142,6 +1231,7 @@ export default function App() {
                             <label>Expiry Date</label>
                             <input
                               type="text"
+                              autoComplete="cc-exp"
                               placeholder="MM/YY"
                               value={newCardData.exp}
                               onChange={(e) => setNewCardData({ ...newCardData, exp: e.target.value })}
@@ -1151,6 +1241,8 @@ export default function App() {
                             <label>CVC</label>
                             <input
                               type="text"
+                              inputMode="numeric"
+                              autoComplete="cc-csc"
                               placeholder="123"
                               value={newCardData.cvc}
                               onChange={(e) => setNewCardData({ ...newCardData, cvc: e.target.value })}
@@ -1167,7 +1259,11 @@ export default function App() {
                         </label>
                       </div>
                     )}
-                  </div>
+                  </div> : (
+                    <div className="checkout-section-block">
+                      <p style={{ color: 'var(--text-muted)' }}>Add an item to your cart before continuing to checkout.</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Summary Pane */}
@@ -1176,7 +1272,7 @@ export default function App() {
 
                   {/* Items list */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '240px', overflowY: 'auto' }}>
-                    {cart.map((item) => (
+                    {cart.length === 0 ? <span style={{ color: 'var(--text-muted)' }}>No items in your cart yet.</span> : cart.map((item) => (
                       <div key={item.cartItemId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
                         <div>
                           <div style={{ fontWeight: 600 }}>{item.title}</div>
@@ -1219,6 +1315,8 @@ export default function App() {
                   <button
                     id="checkout-confirm-prompt-btn"
                     className="checkout-btn"
+                    title={!currentUser ? 'Sign in or create an account to continue' : undefined}
+                    disabled={!currentUser || cart.length === 0}
                     onClick={() => setShowConfirmPrompt(true)}
                   >
                     Review & Confirm Order • ${cartTotals.total.toFixed(2)}
@@ -1236,10 +1334,13 @@ export default function App() {
                   </svg>
                   <h3>Confirm Your Order</h3>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.75rem 0 1rem' }}>
-                    You are authorizing payment of <strong>${cartTotals.total.toFixed(2)}</strong> for {cartTotals.totalItems} item(s).
+                    You are placing an order for <strong>${cartTotals.total.toFixed(2)}</strong> ({cartTotals.totalItems} item(s)).
+                  </p>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
+                    Demo checkout records the order but does not process a card payment.
                   </p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--accent-emerald)' }}>
-                    ✓ An itemized receipt will be immediately emailed to {currentUser?.email || 'your email'}.
+                    ✓ An itemized receipt will be generated for {currentUser?.email || 'your email'}.
                   </p>
                   <div className="confirm-prompt-actions">
                     <button
@@ -1255,7 +1356,7 @@ export default function App() {
                       onClick={handleFinalOrderPlacement}
                       disabled={isSubmittingOrder}
                     >
-                      {isSubmittingOrder ? 'Processing...' : 'Authorize & Pay'}
+                      {isSubmittingOrder ? 'Processing...' : 'Place Demo Order'}
                     </button>
                   </div>
                 </div>
@@ -1283,7 +1384,6 @@ export default function App() {
           </div>
           <div className="footer-links">
             <a href="http://localhost:4000/api/health" target="_blank" rel="noreferrer">Backend API Status</a>
-            <a href="http://localhost:3001/admin" target="_blank" rel="noreferrer">AdminJS Console</a>
             <a href="http://localhost:4000/api/products" target="_blank" rel="noreferrer">Products API</a>
             <a href="http://localhost:4000/api/products/brands" target="_blank" rel="noreferrer">Brands API</a>
           </div>

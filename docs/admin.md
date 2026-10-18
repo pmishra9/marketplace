@@ -21,7 +21,7 @@ The administration console is powered by **AdminJS v7** running on Express insid
 
 ## Architecture & Server Configuration
 
-The entry point is located in [admin/src/server.js](file:///Users/rabi/dev/marketplace/admin/src/server.js).
+The entry point is located in [admin/src/server.js](../admin/src/server.js).
 
 Key features:
 1. **Authenticated Router**: Built using `AdminJSExpress.buildAuthenticatedRouter` with cookie session persistence.
@@ -34,11 +34,7 @@ Key features:
 
 The AdminJS portal is now **actively connected** to your PostgreSQL database (`psql marketplace`) using `@adminjs/prisma`.
 
-The following models are registered in [admin/src/server.js](file:///Users/rabi/dev/marketplace/admin/src/server.js):
-- `Category`
-- `Product`
-- `Order`
-- `OrderItem`
+All Prisma models in the generated Prisma data model are registered in [admin/src/server.js](../admin/src/server.js), including `Category`, `Product`, `User`, `SavedPayment`, `Order`, and `OrderItem`.
 
 You can browse, search, update, and manage records directly in the AdminJS UI on [http://localhost:3001/admin](http://localhost:3001/admin).
 

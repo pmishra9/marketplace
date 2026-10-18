@@ -41,6 +41,7 @@ model Product {
 model User {
   id            String         @id @default(cuid())
   name          String
+  username      String?        @unique
   email         String         @unique
   password      String
   orders        Order[]
@@ -75,7 +76,7 @@ model Order {
   paymentMethod  String      @default("card")
   cardLast4      String?
   isSubscription Boolean     @default(false)
-  receiptEmailed Boolean     @default(true)
+  receiptEmailed Boolean     @default(false)
   status         String      @default("confirmed")
   items          OrderItem[]
   createdAt      DateTime    @default(now())

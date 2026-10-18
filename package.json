@@ -16,6 +16,7 @@
     "db:push": "npm run db:push --workspace=backend",
     "db:generate": "npm run db:generate --workspace=backend",
     "db:seed": "npm run db:seed --workspace=backend",
+    "db:seed:auth": "npm run db:seed:auth --workspace=backend",
     "db:reset": "npm run db:reset --workspace=backend",
     "build": "npm run build --workspaces --if-present",
     "start": "npm run start --workspace=backend"

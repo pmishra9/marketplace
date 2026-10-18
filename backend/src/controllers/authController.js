@@ -1,35 +1,47 @@
 import { PrismaClient } from '@prisma/client';
-import { users as fallbackUsers } from '../data/mockData.js';
+import { hashPassword, verifyPassword } from '../utils/passwords.js';
 
 const prisma = new PrismaClient();
 
 export const signup = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, username, email, password } = req.body;
 
-  if (!email || !password || !name) {
+  if ([name, username, email, password].some((value) => typeof value !== 'string' || !value.trim())) {
     return res.status(400).json({
       success: false,
-      message: 'Name, email, and password are required'
+      message: 'Name, username, email, and password are required'
+    });
+  }
+
+  const normalizedUsername = username.trim().toLowerCase();
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!/^[a-z0-9_]{3,32}$/.test(normalizedUsername)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Username must be 3–32 characters and use only letters, numbers, or underscores'
     });
   }
 
   try {
-    const existing = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
+    const existing = await prisma.user.findFirst({
+      where: { OR: [{ email: normalizedEmail }, { username: normalizedUsername }] }
     });
 
     if (existing) {
       return res.status(409).json({
         success: false,
-        message: 'An account with this email already exists'
+        message: existing.username === normalizedUsername
+          ? 'That username is already taken'
+          : 'An account with this email already exists'
       });
     }
 
     const newUser = await prisma.user.create({
       data: {
         name,
-        email: email.toLowerCase(),
-        password // For demo simplicity; in production bcrypt would be used
+        username: normalizedUsername,
+        email: normalizedEmail,
+        password: await hashPassword(password)
       },
       include: {
         savedPayments: true
@@ -44,41 +56,50 @@ export const signup = async (req, res) => {
       user: userSafe
     });
   } catch (err) {
-    console.warn('Signup DB fallback:', err.message);
-    const mockUser = {
-      id: `user-${Date.now().toString().slice(-4)}`,
-      name,
-      email: email.toLowerCase(),
-      savedPayments: []
-    };
-    return res.status(201).json({
-      success: true,
-      message: 'Account created successfully (local)',
-      user: mockUser
+    console.error('Signup database error:', err.message);
+    return res.status(503).json({
+      success: false,
+      message: 'Account service is unavailable. Please try again later.'
     });
   }
 };
 
 export const signin = async (req, res) => {
-  const { email, password } = req.body;
+  const { username, email, password } = req.body;
+  const login = String(username || email || '').trim().toLowerCase();
 
-  if (!email || !password) {
+  if (!login || typeof password !== 'string' || !password) {
     return res.status(400).json({
       success: false,
-      message: 'Email and password are required'
+      message: 'Username or email and password are required'
     });
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+    const user = await prisma.user.findFirst({
+      where: { OR: [{ username: login }, { email: login }] },
       include: { savedPayments: true }
     });
 
-    if (!user || user.password !== password) {
+    if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Invalid username/email or password'
+      });
+    }
+
+    const passwordCheck = await verifyPassword(password, user.password);
+    if (!passwordCheck.valid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username/email or password'
+      });
+    }
+
+    if (passwordCheck.needsUpgrade) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { password: await hashPassword(password) }
       });
     }
 
@@ -90,19 +111,10 @@ export const signin = async (req, res) => {
       user: userSafe
     });
   } catch (err) {
-    console.warn('Signin DB fallback:', err.message);
-    const found = fallbackUsers.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    );
-
-    if (found) {
-      const { password: _, ...userSafe } = found;
-      return res.json({ success: true, user: userSafe });
-    }
-
-    return res.status(401).json({
+    console.error('Signin database error:', err.message);
+    return res.status(503).json({
       success: false,
-      message: 'Invalid email or password'
+      message: 'Account service is unavailable. Please try again later.'
     });
   }
 };

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { categories, products, orders, users } from '../src/data/mockData.js';
+import { hashPassword } from '../src/utils/passwords.js';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -66,8 +67,9 @@ export async function resetAndSeedDatabase() {
         data: {
           id: u.id,
           name: u.name,
+          username: u.username || u.email.split('@')[0].toLowerCase(),
           email: u.email,
-          password: u.password
+          password: await hashPassword(u.password)
         }
       });
 
@@ -88,6 +90,22 @@ export async function resetAndSeedDatabase() {
         }
       }
     }
+
+    const rabiPassword = await hashPassword('rabi');
+    await prisma.user.upsert({
+      where: { username: 'rabi' },
+      update: {
+        name: 'Rabi',
+        email: 'rabi@marketplace.local',
+        password: rabiPassword
+      },
+      create: {
+        name: 'Rabi',
+        username: 'rabi',
+        email: 'rabi@marketplace.local',
+        password: rabiPassword
+      }
+    });
 
     // 5. Seed Orders
     console.log('📦 Seeding orders...');

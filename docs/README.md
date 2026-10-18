@@ -8,12 +8,12 @@
 
 | Document | Topic | Description |
 |---|---|---|
-| [Storefront Specifications](file:///Users/rabi/dev/marketplace/docs/specs.md) | Feature Requirements | Storefront functional specs: search, sorting, PDP, variants, auth, and checkout flow |
-| [Getting Started](file:///Users/rabi/dev/marketplace/docs/getting-started.md) | Setup & Installation | Prerequisites, dependency install, running dev servers, port mapping, and build steps |
-| [Architecture & Topology](file:///Users/rabi/dev/marketplace/docs/architecture.md) | System Design | High-level data flow diagram, service interactions, and tech stack rationale |
-| [Backend REST API](file:///Users/rabi/dev/marketplace/docs/api.md) | API Specifications | Endpoints, query parameters, payloads, and response contracts for products & orders |
-| [AdminJS Portal](file:///Users/rabi/dev/marketplace/docs/admin.md) | Administration Panel | Credentials, session authentication, and guide for connecting Prisma/Mongoose ORM adapters |
-| [Root Readme](file:///Users/rabi/dev/marketplace/README.md) | Project Overview | Executive overview and quick-start summary |
+| [Storefront Specifications](specs.md) | Feature Requirements | Storefront functional specs: search, sorting, PDP, variants, auth, and checkout flow |
+| [Getting Started](getting-started.md) | Setup & Installation | Prerequisites, dependency install, running dev servers, port mapping, and build steps |
+| [Architecture & Topology](architecture.md) | System Design | High-level data flow diagram, service interactions, and technical design |
+| [Backend REST API](api.md) | API Specifications | Endpoints, query parameters, payloads, and response contracts for products & orders |
+| [AdminJS Portal](admin.md) | Administration Panel | Credentials, session authentication, and database resource configuration |
+| [Root Readme](../README.md) | Project Overview | Executive overview and quick-start summary |
 
 ---
 

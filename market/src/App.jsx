@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
+
 // Built-in initial catalog fallback
 const INITIAL_PRODUCTS = [
   {
@@ -164,10 +166,17 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [pdpVariant, setPdpVariant] = useState(null);
   const [pdpQuantity, setPdpQuantity] = useState(1);
-  const [isSubscribedOption, setIsSubscribedOption] = useState(false);
+  const [isDiscountSelected, setIsDiscountSelected] = useState(false);
 
   // Cart & Drawer State
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    try {
+      const savedCart = JSON.parse(window.localStorage.getItem('marketplaceCart') || '[]');
+      return Array.isArray(savedCart) ? savedCart : [];
+    } catch {
+      return [];
+    }
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -181,15 +190,6 @@ export default function App() {
 
   const [authTab, setAuthTab] = useState('signup'); // 'signup' | 'signin' | 'authenticated'
   const [authFormData, setAuthFormData] = useState({ name: '', username: '', email: '', password: '' });
-  const [paymentChoice, setPaymentChoice] = useState('new'); // 'saved' | 'new'
-  const [selectedSavedCardId, setSelectedSavedCardId] = useState('');
-  const [newCardData, setNewCardData] = useState({
-    number: '',
-    cardholderName: '',
-    exp: '',
-    cvc: '',
-    saveForFuture: true
-  });
   const [showConfirmPrompt, setShowConfirmPrompt] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
@@ -201,7 +201,7 @@ export default function App() {
   useEffect(() => {
     const token = window.localStorage.getItem('marketplaceAccessToken');
     if (!token) return;
-    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.user) setCurrentUser({ ...data.user, token });
@@ -209,6 +209,43 @@ export default function App() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('marketplaceCart', JSON.stringify(cart));
+  }, [cart]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('payment_cancelled')) {
+      window.history.replaceState({}, '', '/checkout');
+      showToast('Payment was canceled. Your cart is still here when you are ready.');
+    }
+  }, []);
+
+  useEffect(() => {
+    const sessionId = new URLSearchParams(window.location.search).get('session_id');
+    if (!sessionId || !currentUser?.token) return undefined;
+    let active = true;
+    fetch(`${API_BASE_URL}/orders/checkout-session/${encodeURIComponent(sessionId)}`, {
+      headers: { Authorization: `Bearer ${currentUser.token}` }
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (response.status === 202) throw new Error('Payment is still processing. Refresh this page in a moment.');
+        if (!response.ok || !data.data) throw new Error(data.message || 'Unable to verify your payment.');
+        return data.data;
+      })
+      .then((order) => {
+        if (!active) return;
+        setConfirmedOrder(order);
+        setCart([]);
+        window.history.replaceState({}, '', '/checkout');
+      })
+      .catch((error) => {
+        if (active) showToast(error.message || 'Unable to verify your payment.');
+      });
+    return () => { active = false; };
+  }, [currentUser?.token]);
 
   const navigate = (path, replace = false) => {
     if (window.location.pathname !== path) {
@@ -229,7 +266,7 @@ export default function App() {
 
   // Fetch live products from backend
   useEffect(() => {
-    fetch('/api/products')
+    fetch(`${API_BASE_URL}/products`)
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         if (json?.data?.length > 0) {
@@ -272,13 +309,13 @@ export default function App() {
       setSelectedProduct(item);
       setPdpVariant(item.variants?.[0]?.name || 'Standard');
       setPdpQuantity(1);
-      setIsSubscribedOption(false);
+      setIsDiscountSelected(false);
     };
 
     if (product) {
       showProduct(product);
     } else {
-      fetch(`/api/products/${encodeURIComponent(route.productId)}`)
+      fetch(`${API_BASE_URL}/products/${encodeURIComponent(route.productId)}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((json) => showProduct(json?.data))
         .catch(() => {});
@@ -296,7 +333,7 @@ export default function App() {
       return;
     }
     let cancelled = false;
-    fetch(`/api/reviews/products/${encodeURIComponent(selectedProduct.id)}`, {
+      fetch(`${API_BASE_URL}/reviews/products/${encodeURIComponent(selectedProduct.id)}`, {
       headers: authHeaders()
     })
       .then((res) => (res.ok ? res.json() : null))
@@ -329,9 +366,9 @@ export default function App() {
   };
 
   // Add to Cart handler
-  const handleAddToCart = (product, variantName = null, qty = 1, isSub = false) => {
+  const handleAddToCart = (product, variantName = null, qty = 1, discountSelected = false) => {
     const chosenVariant = variantName || product.variants?.[0]?.name || 'Standard';
-    const cartItemId = `${product.id}-${chosenVariant}-${isSub ? 'sub' : 'one'}`;
+    const cartItemId = `${product.id}-${chosenVariant}-${discountSelected ? 'discount' : 'standard'}`;
 
     setCart((prev) => {
       const existing = prev.find((item) => item.cartItemId === cartItemId);
@@ -347,8 +384,8 @@ export default function App() {
           cartItemId,
           chosenVariant,
           quantity: qty,
-          isSubscription: isSub,
-          price: isSub ? Number((product.price * 0.9).toFixed(2)) : product.price
+          discountSelected,
+          price: discountSelected ? Number((product.price * 0.9).toFixed(2)) : product.price
         }
       ];
     });
@@ -382,7 +419,7 @@ export default function App() {
   // Customer Auth Submissions
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
-    const endpoint = authTab === 'signup' ? '/api/auth/signup' : '/api/auth/signin';
+    const endpoint = `${API_BASE_URL}/auth/${authTab === 'signup' ? 'signup' : 'signin'}`;
     const payload = authTab === 'signup'
       ? authFormData
       : { username: authFormData.username, password: authFormData.password };
@@ -400,8 +437,6 @@ export default function App() {
       const signedInUser = { ...data.user, token: data.token };
       window.localStorage.setItem('marketplaceAccessToken', data.token);
       setCurrentUser(signedInUser);
-      setSelectedSavedCardId(data.user.savedPayments?.find((payment) => payment.isDefault)?.id || data.user.savedPayments?.[0]?.id || '');
-      setPaymentChoice(data.user.savedPayments?.length ? 'saved' : 'new');
       showToast(`Welcome, ${data.user.name}!`);
     } catch (error) {
       showToast(error.message || 'Unable to reach the account service. Please try again.');
@@ -413,7 +448,7 @@ export default function App() {
     if (!selectedProduct || !currentUser?.token) return;
     setIsSubmittingReview(true);
     try {
-      const response = await fetch(`/api/reviews/products/${encodeURIComponent(selectedProduct.id)}`, {
+      const response = await fetch(`${API_BASE_URL}/reviews/products/${encodeURIComponent(selectedProduct.id)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(reviewDraft)
@@ -434,7 +469,7 @@ export default function App() {
   const handleSignout = async () => {
     if (currentUser?.token) {
       try {
-        await fetch('/api/auth/signout', { method: 'POST', headers: authHeaders() });
+        await fetch(`${API_BASE_URL}/auth/signout`, { method: 'POST', headers: authHeaders() });
       } catch {
         // Clear the local session even if the API is unavailable.
       }
@@ -450,15 +485,8 @@ export default function App() {
       showToast('Sign in or create an account before placing your order.');
       return;
     }
-
-    const selectedCard = currentUser.savedPayments?.find((p) => p.id === selectedSavedCardId);
-    const cardNumber = newCardData.number.replace(/\D/g, '');
-    if (paymentChoice === 'saved' && !selectedCard) {
-      showToast('Choose a saved payment method or enter a new card.');
-      return;
-    }
-    if (paymentChoice === 'new' && (cardNumber.length < 12 || cardNumber.length > 19 || !/^\d{2}\/\d{2}$/.test(newCardData.exp) || !/^\d{3}$/.test(newCardData.cvc) || !newCardData.cardholderName.trim())) {
-      showToast('Enter a valid cardholder name, card number, expiry date, and CVC.');
+    if (!cart.length) {
+      showToast('Add an item to your cart before checkout.');
       return;
     }
 
@@ -470,48 +498,21 @@ export default function App() {
         productId: i.id,
         variant: i.chosenVariant,
         quantity: i.quantity,
-        price: i.price
-      })),
-      subtotal: cartTotals.subtotal,
-      discountAmount: cartTotals.discountTotal,
-      taxAmount: cartTotals.tax,
-      totalAmount: cartTotals.total,
-      isSubscription: cart.some((i) => i.isSubscription),
-      paymentType: paymentChoice,
-      savedPaymentId: paymentChoice === 'saved' ? selectedCard.id : undefined,
-      savePayment: paymentChoice === 'new' && newCardData.saveForFuture,
-      cardDetails: paymentChoice === 'new' ? {
-        number: cardNumber,
-        expiry: newCardData.exp,
-        cvc: newCardData.cvc,
-        cardholderName: newCardData.cardholderName || currentUser.name,
-      } : undefined
+        discountSelected: i.discountSelected
+      }))
     };
 
     try {
-      const res = await fetch('/api/orders', {
+      const res = await fetch(`${API_BASE_URL}/orders/checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(orderPayload)
       });
       const data = await res.json();
-      if (!res.ok || !data.data) {
+      if (!res.ok || !data.data?.checkoutUrl) {
         throw new Error(data.message || 'The order could not be placed. Please try again.');
       }
-      const confirmed = data.data;
-      setConfirmedOrder(confirmed);
-      setCart([]);
-      setNewCardData((value) => ({ ...value, number: '', cvc: '' }));
-      if (orderPayload.savePayment) {
-        fetch('/api/auth/me', { headers: authHeaders() })
-          .then((response) => (response.ok ? response.json() : null))
-          .then((userData) => {
-            if (userData?.user && currentUser?.token) {
-              setCurrentUser({ ...userData.user, token: currentUser.token });
-            }
-          })
-          .catch(() => {});
-      }
+      window.location.assign(data.data.checkoutUrl);
     } catch (error) {
       showToast(error.message || 'Unable to reach the order service. Please try again.');
     } finally {
@@ -695,7 +696,7 @@ export default function App() {
             Precision Gear for Creators & Engineers.
           </h1>
           <p className="hero-subtext">
-            Explore premium acoustics, mechanical hardware, and smart chronographs with customizable variants, subscription savings, and instant checkout.
+            Explore premium acoustics, mechanical hardware, and smart chronographs with customizable variants, optional savings, and instant checkout.
           </p>
           <div className="hero-stats">
             <div className="hero-stat-pill">
@@ -886,7 +887,7 @@ export default function App() {
 
                 <div className="pdp-price-row">
                   <span className="pdp-price-current">
-                    ${(isSubscribedOption ? selectedProduct.price * 0.9 : selectedProduct.price).toFixed(2)}
+                    ${(isDiscountSelected ? selectedProduct.price * 0.9 : selectedProduct.price).toFixed(2)}
                   </span>
                   {selectedProduct.originalPrice > selectedProduct.price && (
                     <span className="pdp-price-original">${selectedProduct.originalPrice.toFixed(2)}</span>
@@ -950,7 +951,7 @@ export default function App() {
                     id="pdp-add-to-cart-btn"
                     className="btn-add-cart-large"
                     onClick={() => {
-                      handleAddToCart(selectedProduct, pdpVariant, pdpQuantity, isSubscribedOption);
+                      handleAddToCart(selectedProduct, pdpVariant, pdpQuantity, isDiscountSelected);
                       closePDP();
                     }}
                   >
@@ -965,25 +966,25 @@ export default function App() {
                   <button
                     id="pdp-buy-now-btn"
                     className="btn-checkout-direct"
-                    onClick={() => handleBuyNowDirect(selectedProduct, pdpVariant, pdpQuantity, isSubscribedOption)}
+                    onClick={() => handleBuyNowDirect(selectedProduct, pdpVariant, pdpQuantity, isDiscountSelected)}
                   >
                     <span>Checkout Now</span>
                   </button>
                 </div>
 
-                {/* Subscribe Button / Option */}
+                {/* One-time discount option */}
                 <div className="subscribe-card">
                   <div className="subscribe-card-text">
                     <h4>
-                      <span>🔄</span> Subscribe & Save 10%
+                      <span>✦</span> Save 10% on this order
                     </h4>
-                    <p>Auto-delivers monthly. Skip or cancel anytime with 1 click.</p>
+                    <p>One-time purchase with a 10% discount.</p>
                   </div>
                   <button
                     className="btn-subscribe-toggle"
-                    onClick={() => setIsSubscribedOption(!isSubscribedOption)}
+                    onClick={() => setIsDiscountSelected(!isDiscountSelected)}
                   >
-                    {isSubscribedOption ? '✓ Subscribed' : 'Select Subscription'}
+                    {isDiscountSelected ? '✓ Discount selected' : 'Apply 10% discount'}
                   </button>
                 </div>
 
@@ -1058,7 +1059,7 @@ export default function App() {
                         <span className="cart-item-name">{item.title}</span>
                         <div style={{ fontSize: '0.78rem', color: 'var(--accent-cyan)' }}>
                           Variant: {item.chosenVariant}
-                          {item.isSubscription && <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>• Monthly Sub</span>}
+                          {item.discountSelected && <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>• 10% off</span>}
                         </div>
                         <span className="cart-item-price">${(item.price * item.quantity).toFixed(2)}</span>
                         <div className="cart-qty-controls">
@@ -1144,7 +1145,7 @@ export default function App() {
                   <div style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-main)' }}>Order Receipt Summary:</div>
                   <div className="price-breakdown-row">
                     <span>Payment Method:</span>
-                    <strong style={{ color: 'var(--text-main)' }}>{confirmedOrder.paymentMethod} (ending in {confirmedOrder.cardLast4 || '4242'})</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>{confirmedOrder.paymentMethod || 'Stripe Checkout'}{confirmedOrder.cardLast4 ? ` (ending in ${confirmedOrder.cardLast4})` : ''}</strong>
                   </div>
                   <div className="price-breakdown-row">
                     <span>Items Count:</span>
@@ -1284,112 +1285,15 @@ export default function App() {
                       <span>2. Payment Information</span>
                     </div>
 
-                    {/* Saved Payment selection if user has cards */}
-                    {currentUser?.savedPayments?.length > 0 && (
-                      <div className="saved-payments-container">
-                        <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)', marginBottom: '0.25rem' }}>
-                          Saved Payment Methods:
-                        </div>
-                        {currentUser.savedPayments.map((card) => (
-                          <div
-                            key={card.id}
-                            className={`saved-payment-card ${paymentChoice === 'saved' && selectedSavedCardId === card.id ? 'selected' : ''}`}
-                            onClick={() => {
-                              setPaymentChoice('saved');
-                              setSelectedSavedCardId(card.id);
-                            }}
-                          >
-                            <div className="payment-card-left">
-                              <span className="card-brand-badge">{card.cardBrand}</span>
-                              <span>•••• {card.last4}</span>
-                              <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>Exp {card.expMonth}/{card.expYear}</span>
-                            </div>
-                            <input
-                              type="radio"
-                              name="paymentRadio"
-                              checked={paymentChoice === 'saved' && selectedSavedCardId === card.id}
-                              onChange={() => {}}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* New Card Option */}
-                    <div
-                      className={`saved-payment-card ${paymentChoice === 'new' ? 'selected' : ''}`}
-                      onClick={() => setPaymentChoice('new')}
-                      style={{ marginBottom: '1rem' }}
-                    >
+                    <div className="saved-payment-card selected">
                       <div className="payment-card-left">
-                        <span className="card-brand-badge">NEW</span>
-                        <span>Use New Credit or Debit Card</span>
+                        <span className="card-brand-badge">STRIPE</span>
+                        <span>Secure card payment</span>
                       </div>
-                      <input
-                        type="radio"
-                        name="paymentRadio"
-                        checked={paymentChoice === 'new'}
-                        onChange={() => {}}
-                      />
                     </div>
-
-                    {paymentChoice === 'new' && (
-                      <div>
-                        <div className="input-field-group">
-                          <label>Cardholder Name</label>
-                          <input
-                            type="text"
-                            autoComplete="cc-name"
-                            placeholder="Elena Rostova"
-                            value={newCardData.cardholderName}
-                            onChange={(e) => setNewCardData({ ...newCardData, cardholderName: e.target.value })}
-                          />
-                        </div>
-                        <div className="input-field-group">
-                          <label>Card Number</label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="cc-number"
-                            placeholder="4242 4242 4242 4242"
-                            value={newCardData.number}
-                            onChange={(e) => setNewCardData({ ...newCardData, number: e.target.value })}
-                          />
-                          <small style={{ color: 'var(--text-dim)' }}>Local test card: 4242 4242 4242 4242 · any future MM/YY · any 3-digit CVC</small>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                          <div className="input-field-group">
-                            <label>Expiry Date</label>
-                            <input
-                              type="text"
-                              autoComplete="cc-exp"
-                              placeholder="MM/YY"
-                              value={newCardData.exp}
-                              onChange={(e) => setNewCardData({ ...newCardData, exp: e.target.value })}
-                            />
-                          </div>
-                          <div className="input-field-group">
-                            <label>CVC</label>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              autoComplete="cc-csc"
-                              placeholder="123"
-                              value={newCardData.cvc}
-                              onChange={(e) => setNewCardData({ ...newCardData, cvc: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={newCardData.saveForFuture}
-                            onChange={(e) => setNewCardData({ ...newCardData, saveForFuture: e.target.checked })}
-                          />
-                          <span>Save this card for faster future checkouts</span>
-                        </label>
-                      </div>
-                    )}
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5 }}>
+                      Card details are entered on Stripe's secure checkout page. Stripe will also collect the shipping address.
+                    </p>
                   </div> : (
                     <div className="checkout-section-block">
                       <p style={{ color: 'var(--text-muted)' }}>Add an item to your cart before continuing to checkout.</p>
@@ -1468,7 +1372,7 @@ export default function App() {
                     You are placing an order for <strong>${cartTotals.total.toFixed(2)}</strong> ({cartTotals.totalItems} item(s)).
                   </p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
-                    Local mock payment authorizes only the listed test card; no real card is charged.
+                    You will be redirected to Stripe's secure page to enter payment and shipping details.
                   </p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--accent-emerald)' }}>
                     ✓ An itemized receipt will be generated for {currentUser?.email || 'your email'}.
@@ -1487,7 +1391,7 @@ export default function App() {
                       onClick={handleFinalOrderPlacement}
                       disabled={isSubmittingOrder}
                     >
-                      {isSubmittingOrder ? 'Processing...' : 'Authorize & Place Order'}
+                      {isSubmittingOrder ? 'Opening Stripe Checkout...' : 'Continue to Stripe Checkout'}
                     </button>
                   </div>
                 </div>
@@ -1514,9 +1418,9 @@ export default function App() {
             <span>© 2026 Nexus Market Monorepo Ecosystem • Specifications Implemented.</span>
           </div>
           <div className="footer-links">
-            <a href="http://localhost:4000/api/health" target="_blank" rel="noreferrer">Backend API Status</a>
-            <a href="http://localhost:4000/api/products" target="_blank" rel="noreferrer">Products API</a>
-            <a href="http://localhost:4000/api/products/brands" target="_blank" rel="noreferrer">Brands API</a>
+            <a href={`${API_BASE_URL}/health`} target="_blank" rel="noreferrer">Backend API Status</a>
+            <a href={`${API_BASE_URL}/products`} target="_blank" rel="noreferrer">Products API</a>
+            <a href={`${API_BASE_URL}/products/brands`} target="_blank" rel="noreferrer">Brands API</a>
           </div>
         </div>
       </footer>

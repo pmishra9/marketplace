@@ -10,6 +10,8 @@
 |---|---|---|
 | [Storefront Specifications](specs.md) | Feature Requirements | Storefront functional specs: search, sorting, PDP, variants, auth, and checkout flow |
 | [Getting Started](getting-started.md) | Setup & Installation | Prerequisites, dependency install, running dev servers, port mapping, and build steps |
+| [Production Configuration](production-configuration.md) | Vercel + Render + Supabase | Production environment variables and how Vercel forwards storefront API calls to Render |
+| [Production Deployment](production-deployment.md) | Render + Vercel + Supabase | Service creation, migrations, deploy commands, and smoke checks |
 | [Architecture & Topology](architecture.md) | System Design | High-level data flow diagram, service interactions, and technical design |
 | [Backend REST API](api.md) | API Specifications | Endpoints, query parameters, payloads, and response contracts for products & orders |
 | [AdminJS Portal](admin.md) | Administration Panel | Credentials, session authentication, and database resource configuration |

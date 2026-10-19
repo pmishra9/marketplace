@@ -69,5 +69,5 @@ This document details the design choices, service communications, and integratio
 ## Technical Debt & Recommended Next Steps
 
 1. **Email Delivery**: Connect a mail provider so generated receipts are delivered to customers; the current backend writes receipt details to its log only.
-2. **Payment Processing**: Local development supports a server-side mock authorization for the whitelisted test Visa `4242 4242 4242 4242`. It stores only the last four digits and a mock reference. Integrate Stripe test mode before provider-backed payment testing; mock payments are rejected when `NODE_ENV=production`.
+2. **Recurring Billing (TODO)**: Checkout currently charges each order once. Add subscription records and a scheduled backend worker that charges a customer only when their subscription is active and due for renewal. Save a Stripe payment method with the customer's consent for off-session use, and make renewal charges idempotent. Handle payment failures/retries, cancellation, and Stripe webhook updates before enabling recurring charges. Consider Stripe Billing subscriptions to manage renewals and retries instead of implementing those rules in a custom worker.
 3. **Customer Sessions**: Replace the demo account state with a server-backed session or token flow so sign-in persists safely across reloads.

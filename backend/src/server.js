@@ -6,6 +6,8 @@ import productRoutes from './routes/productRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
+import { handleStripeWebhookEvent } from './controllers/orderController.js';
+import { StripeConfigurationError, verifyStripeWebhook } from './utils/stripe.js';
 
 dotenv.config();
 
@@ -14,6 +16,26 @@ const PORT = process.env.PORT || 4000;
 
 // Middleware
 app.use(cors({ origin: true, credentials: true }));
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
+  let event;
+  try {
+    event = verifyStripeWebhook(req.body, req.get('stripe-signature'));
+  } catch (err) {
+    console.error('Stripe webhook signature rejected:', err.message);
+    if (err instanceof StripeConfigurationError) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
+    return res.status(400).json({ success: false, message: 'Invalid Stripe webhook signature.' });
+  }
+
+  try {
+    await handleStripeWebhookEvent(event);
+    return res.json({ received: true });
+  } catch (err) {
+    console.error('Stripe webhook processing failed:', err.message);
+    return res.status(500).json({ success: false, message: 'Stripe webhook could not be processed.' });
+  }
+});
 app.use(express.json());
 app.use(morgan('dev'));
 
@@ -60,6 +82,6 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Marketplace Backend running on http://localhost:${PORT}`);
 });

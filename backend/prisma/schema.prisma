@@ -83,6 +83,7 @@ model Order {
   paymentStatus  String      @default("authorized")
   cardLast4      String?
   isSubscription Boolean     @default(false)
+  shippingAddress Json?
   receiptEmailed Boolean     @default(false)
   status         String      @default("confirmed")
   items          OrderItem[]

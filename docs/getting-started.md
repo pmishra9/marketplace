@@ -2,6 +2,8 @@
 
 This guide covers environment prerequisites, initial installation, running development servers, and common setup configurations.
 
+For production environment settings and the Vercel-to-Render connection, see [Production Configuration](production-configuration.md). For deployment steps, see [Production Deployment](production-deployment.md).
+
 ---
 
 ## Prerequisites
@@ -31,22 +33,15 @@ This leverages **npm workspaces** to link shared packages and handle hoisting au
 
 ## Environment Setup
 
-Template environment files are provided for the root and each workspace. Copy each workspace template from inside that workspace:
+Backend and AdminJS each have an app-specific environment template. From the repository root, create their local environment files with:
 
 ```bash
-# Optional root template
-cp .env.example .env
-
-# Backend configuration
-cd backend
-cp .env.example .env
-cd ..
-
-# AdminJS configuration
-cd admin
-cp .env.example .env
-cd ..
+cp -n backend/.env.example backend/.env
+cp -n admin/.env.example admin/.env
+cp -n market/.env.example market/.env
 ```
+
+Edit each app's `.env` for its local settings. Keep these local files private; they are ignored by Git. The storefront's `VITE_API_BASE_URL` defaults to `/api`, which Vite proxies to the local backend during development and Vercel forwards to Render in production. It should not contain database credentials or other secrets.
 
 ### Key Defaults
 | Setting | Variable | Default | Notes |
@@ -57,6 +52,7 @@ cd ..
 | Admin User | `ADMIN_EMAIL` | `admin@marketplace.local` | Initial admin login |
 | Admin Pass | `ADMIN_PASSWORD` | `adminsecret` | Initial admin password |
 | Frontend Dev Port | Vite configuration | `3000` | Proxies `/api` calls to `:4000` |
+| Frontend API Base | `VITE_API_BASE_URL` (in `market/.env`) | `/api` | Vite proxies this path to the backend |
 
 ---
 
@@ -68,7 +64,7 @@ The monorepo uses Prisma ORM connected to your local `marketplace` database (`ps
 cd backend
 ```
 
-Copy `.env.example` to `.env` if you have not already, then replace `USER` and `PASSWORD` in `DATABASE_URL` with your local PostgreSQL credentials. The template deliberately does not assume a machine-specific database role. Apply schema changes from checked-in migration files with `npm run db:migrate`.
+If you have not already created `backend/.env`, copy it from `backend/.env.example`. Replace `USER` and `PASSWORD` in `DATABASE_URL` with your local PostgreSQL credentials. The template deliberately does not assume a machine-specific database role. Apply schema changes from checked-in migration files with `npm run db:migrate`.
 
 The development customer login is `rabi` / `rabi`. After applying migrations, seed or refresh just this account with:
 
@@ -155,19 +151,6 @@ Build production bundles for all workspaces from the repository root:
 npm run build
 ```
 
-## Production Backend Deployment
+## Production
 
-Set production environment variables in the hosting platform, including `NODE_ENV=production`, `DATABASE_URL`, and a strong `JWT_SECRET`. Run database migrations once as a deployment or release step from `backend/`, using an environment where the Prisma CLI is installed:
-
-```bash
-cd backend
-npm run db:migrate
-```
-
-Configure the backend service's process start command as:
-
-```bash
-npm start
-```
-
-Use `prisma migrate deploy` (`npm run db:migrate`) for production migrations. Do not use `db:migrate:dev` or `db:reset` against production data. Keep migration deployment separate from the long-running server process so each release applies migrations once before starting the application.
+See [Production Configuration](production-configuration.md) for environment variables and service wiring, and [Production Deployment](production-deployment.md) for host setup and release commands. Production migrations must use `prisma migrate deploy`; do not use `db:migrate:dev` or `db:reset` against production data.

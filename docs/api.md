@@ -152,44 +152,41 @@ Retrieves available marketplace categories.
 ---
 
 ### 6. Order Placement
-Submits customer orders from the cart.
+Starts a Stripe-hosted payment session for the signed-in customer's cart. The backend loads product prices from the database; client-supplied prices and totals are ignored.
 
 - **Method**: `POST`
-- **Path**: `/api/orders`
+- **Path**: `/api/orders/checkout-session`
 - **Headers**: `Content-Type: application/json`, `Authorization: Bearer <JWT>` (required)
-- A signed-in account is mandatory. The signed-in account supplies the customer name, email, and required user ID; matching fields sent in the body are ignored.
-- In local development, use `paymentType: "new"` with `cardDetails: { "number": "4242424242424242", "expiry": "12/30", "cvc": "123" }`, or select a saved test payment method with `paymentType: "saved"` and `savedPaymentId`. Only the allowlisted Visa test number is approved. `PAYMENT_MODE=mock` is local-only and rejected when `NODE_ENV=production`.
+- Requires `STRIPE_SECRET_KEY` on the backend. The signed-in account supplies the customer name, email, and user ID.
 - **Body**:
   ```json
   {
-    "customerName": "Jane Doe",
-    "customerEmail": "jane@example.com",
     "items": [
-      { "productId": "prod-001", "quantity": 1, "price": 299.99 }
-    ],
-    "totalAmount": 299.99
+      { "productId": "prod-001", "variant": "Matte Obsidian", "quantity": 1, "discountSelected": true }
+    ]
   }
   ```
 - **Response (201)**:
   ```json
   {
     "success": true,
-    "message": "Order created successfully; receipt generated locally (email delivery is not configured)",
     "data": {
-      "id": "ORD-7812",
-      "customerName": "Jane Doe",
-      "customerEmail": "jane@example.com",
-      "items": [...],
-      "totalAmount": 299.99,
-      "paymentProvider": "local-mock",
-      "paymentReference": "mock_<id>",
-      "paymentStatus": "authorized",
-      "status": "confirmed",
-      "receiptEmailed": false,
-      "createdAt": "2026-10-18T16:30:00.000Z"
+      "orderId": "ORD-<uuid>",
+      "checkoutUrl": "https://checkout.stripe.com/..."
     }
   }
   ```
+
+The order is saved with a pending status before redirecting to Stripe. Card details are collected by Stripe and are never sent to this API. Stripe webhook events confirm or fail the pending order. A completed checkout stores the collected shipping address on the order.
+
+### Verify a Checkout Session
+Retrieves the signed-in customer's order after Stripe redirects back to the storefront. The backend also checks Stripe directly, so the return page does not rely on a browser-supplied payment status.
+
+- **Method**: `GET`
+- **Path**: `/api/orders/checkout-session/:sessionId`
+- **Authentication**: `Authorization: Bearer <JWT>` (required; the session must belong to the signed-in customer)
+- **Response (200)**: `{ "success": true, "paymentStatus": "paid", "data": { "id": "ORD-...", "status": "confirmed", ... } }`
+- **Response (202)**: Payment is still processing; no order data is returned yet.
 
 ---
 
@@ -261,5 +258,5 @@ Retrieves the signed-in customer's saved payment methods.
 - **Method**: `GET`
 - **Path**: `/api/auth/users/:userId/payments`
 
-The backend stores only the payment provider, mock authorization reference, authorization status, and last four digits. It never stores the submitted card number or CVC. The current order controller writes a formatted receipt to the backend log. It does not send email, and `receiptEmailed` remains `false` until an email provider is integrated.
+This endpoint returns legacy saved payment metadata. Stripe Checkout currently asks customers to enter payment details each time; the app does not receive or store card data. The backend writes a formatted receipt preview to its log. It does not send email, and `receiptEmailed` remains `false` until an email provider is integrated.
 

@@ -10,9 +10,10 @@
 # 1. Install all dependencies across all workspaces
 npm install
 
-# 2. Configure local environment files and PostgreSQL credentials
-cp backend/.env.example backend/.env
-cp admin/.env.example admin/.env
+# 2. Configure app-specific local environment files and PostgreSQL credentials
+cp -n backend/.env.example backend/.env
+cp -n admin/.env.example admin/.env
+cp -n market/.env.example market/.env
 # Edit DATABASE_URL in both files for your local PostgreSQL role; set a private JWT_SECRET in backend/.env
 
 # 3. Reset & populate a fresh local demo database
@@ -64,9 +65,9 @@ The development-only customer credentials are **username:** `rabi`, **password:*
 Product reviews are available on product pages after a signed-in customer has a confirmed, shipped, delivered, or completed order for that product. Each customer can post one review per product. Reviews are stored and shown individually; product rating aggregates are not recalculated yet. Product UPC values are optional, unique 12-digit UPC-A codes with a verified check digit.
 
 Orders must belong to a signed-in customer. The database requires every order to reference a user.
-For an existing database with no Prisma migration history that still has the original schema, mark the baseline as applied once with `npx prisma migrate resolve --applied 20261018182000_init --schema backend/prisma/schema.prisma`, then run `npm run db:migrate`. The feature migration links orders to existing accounts by email and stops safely if any owner remains unknown; for known demo fixtures, run `npm run db:backfill:order-owners` first. If the database was already synchronized to the latest schema with `db push`, mark both migrations as applied before running `npm run db:migrate`. `npm run db:reset` recreates the schema and seeds orders with owners; it deletes existing database contents.
+For an existing database with no Prisma migration history that still has the original schema, mark the baseline as applied once with `npx prisma migrate resolve --applied 20261018182000_init --schema backend/prisma/schema.prisma`, then run `npm run db:migrate`. The feature migration links orders to existing accounts by email and stops safely if any owner remains unknown; for known demo fixtures, run `npm run db:backfill:order-owners` first. If `db push` already synchronized the complete schema, including `Order.shippingAddress`, mark all three migrations as applied before running `npm run db:migrate`. `npm run db:reset` recreates the schema and seeds orders with owners; it deletes existing database contents.
 
-Local checkout authorizes only the test card `4242 4242 4242 4242` with a future expiry and any 3-digit CVC. This mock authorization is disabled in production, does not charge a card, and does not store the card number or CVC. Stripe test mode is still needed for provider-backed payment testing.
+Checkout redirects to Stripe Checkout for payment and shipping details. Configure Stripe test keys and a webhook signing secret in `backend/.env` for local testing; the backend does not receive or store card numbers or CVCs.
 
 ---
 
@@ -78,6 +79,8 @@ All detailed guides and architectural references have been centralized under `/d
 |---|---|---|
 | **Storefront Specifications** | [docs/specs.md](docs/specs.md) | Required storefront feature checklist (search, variants, PDP, auth, checkout) |
 | **Getting Started** | [docs/getting-started.md](docs/getting-started.md) | Prerequisites, environment files, single-workspace scripts, and build steps |
+| **Production Configuration** | [docs/production-configuration.md](docs/production-configuration.md) | Environment variables and Vercel-to-Render API wiring |
+| **Production Deployment** | [docs/production-deployment.md](docs/production-deployment.md) | Service setup, migrations, deploy commands, and smoke checks |
 | **Architecture & Topology** | [docs/architecture.md](docs/architecture.md) | High-level data flow diagram, service interactions, and technical design |
 | **Backend REST API** | [docs/api.md](docs/api.md) | Complete endpoint reference, query parameters, and JSON schemas |
 | **AdminJS Portal** | [docs/admin.md](docs/admin.md) | Dashboard setup, credentials, session configuration, and ORM adapter guides |
@@ -111,8 +114,8 @@ For local startup, run `npm run dev`; it applies pending migrations before start
 - **Specs & Documentation**: Linked [docs/specs.md](docs/specs.md) to [docs/README.md](docs/README.md) and root [README.md](README.md).
 - **Search, Sort & Filters**: Added sorting by Relevance, Price Low-to-High, Price High-to-Low, and Name (A-Z). Added brand filters and discount-only toggle.
 - **Product Display Page (PDP)**: Implemented dedicated modal PDP displaying high-res imagery, description, brand, interactive variant selector, quantity stepper, "Add to Cart", "Subscribe & Save 10%", and direct "Checkout Now" actions.
-- **Authentication**: Added customer Sign Up & Sign In flows, JWT sessions, and saved payment methods.
-- **Checkout Flow**: Added cart item variants, price breakdown with discounts, estimated sales tax, saved payment method selection or new card entry, and a local allowlisted test-card authorization flow. Receipt delivery is currently simulated by writing the receipt to the backend log; configure an email provider before claiming email delivery.
+- **Authentication**: Added customer Sign Up & Sign In flows and JWT sessions.
+- **Checkout Flow**: Uses Stripe-hosted Checkout, with server-priced items, pending orders, signed webhooks, and an authenticated payment-return check. Receipt delivery is currently simulated by writing the receipt to the backend log; configure an email provider before claiming email delivery.
 
 ### [1.2.0] - PostgreSQL & Prisma Integration with Dummy Reset
 - **Database**: Configured PostgreSQL (`psql marketplace`) via Prisma ORM.

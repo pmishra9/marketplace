@@ -41,6 +41,10 @@ The storefront reads `VITE_API_BASE_URL` and defaults it to `/api`. The local te
 
 The checkout redirects customers to Stripe Checkout, then returns them to `/checkout?session_id=...`. The storefront preserves the cart during that redirect and asks the authenticated backend to confirm the payment. The backend also receives signed webhook events, so an order can be confirmed even if the customer closes the browser before returning. Use Stripe test keys and test cards until the test-mode flow and webhook are verified; switch both Stripe keys to live mode only when ready to accept real charges. Stripe's [Checkout guide](https://docs.stripe.com/checkout/quickstart?lang=node) covers the hosted payment page flow.
 
+### Recurring subscriptions
+
+Customers may opt into a monthly renewal at checkout. Stripe Checkout saves the card for off-session use only after the customer agrees to the recurring charge. To run renewals on Render, create a Cron Job using the same repository and backend environment as the web service, set its root directory to `backend`, and use `npm run billing:run` as the command. Schedule it daily. The job charges active subscriptions whose `nextBillingAt` has arrived, records a renewal order, and uses a Stripe idempotency key to prevent duplicate charges if the job is retried. A failed off-session payment moves the subscription to `past_due`; automatic retries and self-service card updates are not implemented yet, so monitor those subscriptions and resolve them before relying on recurring revenue.
+
 The existing storefront uses a flat 8.5% estimated tax, which this integration adds to checkout as a line item. It is not Stripe Tax or a jurisdiction-specific calculation. Configure and verify the tax treatment for the business before enabling live charges; see Stripe's [Checkout Tax guide](https://docs.stripe.com/tax/checkout).
 
 Before deploying, replace `https://YOUR-RENDER-SERVICE.onrender.com` in that file with the actual Render service origin. Keep the `/api/:path*` suffix:

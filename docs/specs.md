@@ -42,6 +42,7 @@ Email the receipt to the customer
 ## Current implementation gaps
 
 - Checkout uses Stripe-hosted Checkout for payment and shipping details. Stripe test keys and a webhook signing secret are required for local checkout testing. The backend never receives or stores card numbers or CVCs.
+- Customers can opt into monthly renewals at checkout. Render Cron Job command `npm run billing:run` charges active subscriptions using Stripe off-session PaymentIntents; failed payments move to `past_due`. Automatic retries and self-service payment-method updates remain TODOs.
 - The backend generates and logs a receipt preview. It does not deliver email; an email provider is still required.
 - Customer sign-in is held in frontend memory and is lost on reload. A server-backed session or token flow is still required for persistent sign-in.
 - Product search, relevance sorting, brand and discount filters, variants, cart, and the checkout summary are implemented in the storefront. The “Relevance” filter wording above is ambiguous because relevance is a sort mode, not a separate filter.

@@ -9,7 +9,7 @@ export class StripeConfigurationError extends Error {
   }
 }
 
-export const stripeRequest = async (path, params, method = 'POST') => {
+export const stripeRequest = async (path, params, method = 'POST', requestOptions = {}) => {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new StripeConfigurationError();
 
@@ -20,6 +20,7 @@ export const stripeRequest = async (path, params, method = 'POST') => {
       'Content-Type': 'application/x-www-form-urlencoded'
     }
   };
+  if (requestOptions.idempotencyKey) options.headers = { ...options.headers, 'Idempotency-Key': requestOptions.idempotencyKey };
   if (params && method !== 'GET') options.body = new URLSearchParams(params);
   const response = await fetch(`${STRIPE_API_BASE}${path}`, options);
   const result = await response.json().catch(() => ({}));

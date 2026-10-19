@@ -25,6 +25,7 @@ For a new, empty database, `prisma migrate deploy` applies the checked-in migrat
   npx prisma migrate resolve --applied 20261018182000_init
   npx prisma migrate resolve --applied 20261018183000_marketplace_features
   npx prisma migrate resolve --applied 20261019120000_add_order_shipping_address
+  npx prisma migrate resolve --applied 20261019150000_add_recurring_subscriptions
   ```
 
 - If the database contains legacy orders without owners, run `npm run db:backfill:order-owners` before migration deployment. The migration matches remaining orders to accounts by email and fails if an owner is still unknown.

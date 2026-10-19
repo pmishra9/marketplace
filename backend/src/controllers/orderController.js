@@ -54,6 +54,34 @@ export const getOrders = async (req, res) => {
   }
 };
 
+export const getSubscriptions = async (req, res) => {
+  try {
+    const subscriptions = await prisma.subscription.findMany({
+      where: { userId: req.authUser.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true, amount: true, currency: true, nextBillingAt: true, createdAt: true }
+    });
+    return res.json({ success: true, data: subscriptions });
+  } catch (err) {
+    console.error('Could not load subscriptions:', err.message);
+    return res.status(503).json({ success: false, message: 'Unable to load subscriptions right now.' });
+  }
+};
+
+export const cancelSubscription = async (req, res) => {
+  try {
+    const result = await prisma.subscription.updateMany({
+      where: { id: req.params.subscriptionId, userId: req.authUser.id, status: { in: ['active', 'past_due', 'needs_payment_method'] } },
+      data: { status: 'canceled', nextBillingAt: null }
+    });
+    if (!result.count) return res.status(404).json({ success: false, message: 'Active subscription not found.' });
+    return res.json({ success: true, message: 'Subscription canceled.' });
+  } catch (err) {
+    console.error('Could not cancel subscription:', err.message);
+    return res.status(503).json({ success: false, message: 'Unable to cancel this subscription right now.' });
+  }
+};
+
 const getStorefrontUrl = () => (process.env.STOREFRONT_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 const flattenCheckoutItems = (items) => {
@@ -80,6 +108,7 @@ const flattenCheckoutItems = (items) => {
 };
 
 export const createCheckoutSession = async (req, res) => {
+  const isSubscription = req.body?.isSubscription === true;
   const requestedItems = req.body?.items;
   if (!Array.isArray(requestedItems) || requestedItems.length === 0 || requestedItems.length > 50) {
     return res.status(400).json({ success: false, message: 'Add between 1 and 50 items before checkout.' });
@@ -116,7 +145,7 @@ export const createCheckoutSession = async (req, res) => {
       }
 
       const basePriceCents = Math.round(Number(product.price) * 100);
-      const unitPriceCents = item.discountSelected ? Math.round(basePriceCents * 0.9) : basePriceCents;
+      const unitPriceCents = (isSubscription || item.discountSelected) ? Math.round(basePriceCents * 0.9) : basePriceCents;
       const originalPriceCents = Math.round(Number(product.originalPrice || product.price) * 100);
       pricedItems.push({
         ...item,
@@ -166,7 +195,7 @@ export const createCheckoutSession = async (req, res) => {
         paymentMethod: 'Stripe Checkout',
         paymentProvider: 'stripe',
         paymentStatus: 'pending',
-        isSubscription: false,
+        isSubscription,
         receiptEmailed: false,
         status: 'pending',
         items: {
@@ -184,10 +213,13 @@ export const createCheckoutSession = async (req, res) => {
     const sessionParams = {
       mode: 'payment',
       'payment_method_types[0]': 'card',
+      customer_creation: 'always',
       customer_email: req.authUser.email,
       client_reference_id: orderId,
       'metadata[orderId]': orderId,
       'metadata[userId]': req.authUser.id,
+      'metadata[isSubscription]': String(isSubscription),
+      ...(isSubscription ? { 'payment_intent_data[setup_future_usage]': 'off_session' } : {}),
       success_url: `${storefrontUrl}/checkout?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${storefrontUrl}/checkout?payment_cancelled=1`,
       submit_type: 'pay',
@@ -232,9 +264,71 @@ const confirmPaidCheckout = async (session) => {
   });
   const order = await prisma.order.findFirst({
     where: { id: session.metadata.orderId, userId: session.metadata.userId },
-    include: { items: true }
+    include: { items: { include: { product: true } } }
   });
+  if (order?.isSubscription) await activateSubscriptionFromCheckout(order, session);
   return order ? { order, newlyConfirmed: updated.count > 0 } : null;
+};
+
+const addOneMonth = (date) => {
+  const next = new Date(date);
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + 1);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
+  return next;
+};
+
+const activateSubscriptionFromCheckout = async (order, session) => {
+  const paymentIntentId = typeof session.payment_intent === 'string'
+    ? session.payment_intent
+    : session.payment_intent?.id;
+  const paymentIntent = paymentIntentId
+    ? await stripeRequest(`/payment_intents/${encodeURIComponent(paymentIntentId)}`, null, 'GET')
+    : null;
+  const paymentMethodId = typeof paymentIntent?.payment_method === 'string'
+    ? paymentIntent.payment_method
+    : paymentIntent?.payment_method?.id;
+  const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+  const active = Boolean(paymentMethodId && customerId);
+  const items = order.items.map((item) => ({
+    productId: item.productId,
+    title: item.product?.title || item.productId,
+    variant: item.variant,
+    quantity: item.quantity,
+    unitPrice: Number(item.price),
+    originalUnitPrice: Number(item.product?.originalPrice || item.product?.price || item.price)
+  }));
+
+  await prisma.subscription.upsert({
+    where: { initialOrderId: order.id },
+    create: {
+      userId: order.userId,
+      initialOrderId: order.id,
+      status: active ? 'active' : 'needs_payment_method',
+      stripeCustomerId: customerId || null,
+      stripePaymentMethodId: paymentMethodId || null,
+      items,
+      amount: Number(order.totalAmount),
+      currency: (process.env.STRIPE_CURRENCY || 'usd').toLowerCase(),
+      nextBillingAt: active ? addOneMonth(new Date()) : null,
+      lastPaymentIntentId: paymentIntentId || null
+    },
+    update: {}
+  });
+  if (active) {
+    await prisma.subscription.updateMany({
+      where: { initialOrderId: order.id, status: { in: ['pending', 'needs_payment_method'] } },
+      data: {
+        status: 'active',
+        stripeCustomerId: customerId,
+        stripePaymentMethodId: paymentMethodId,
+        nextBillingAt: addOneMonth(new Date()),
+        lastPaymentIntentId: paymentIntentId || null
+      }
+    });
+  }
 };
 
 export const getCheckoutSessionOrder = async (req, res) => {

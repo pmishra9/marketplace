@@ -20,6 +20,7 @@
     "db:seed:auth": "npm run db:seed:auth --workspace=backend",
     "db:backfill:order-owners": "npm run db:backfill:order-owners --workspace=backend",
     "db:reset": "npm run db:reset --workspace=backend",
+    "resetdb": "npm run db:reset --workspace=backend",
     "build": "npm run build --workspaces --if-present",
     "start": "npm run start --workspace=backend"
   },

@@ -53,7 +53,8 @@ Category selection, product detail links, and checkout update the browser URL. T
 
 | Command | Action |
 |---|---|
-| `npm run db:reset` | **Wipes & re-imports all dummy data** into `psql marketplace` |
+| `npm run resetdb` | **Wipes the configured database, reapplies migrations, and reseeds demo data** |
+| `npm run db:reset` | Same reset command under the database command namespace |
 | `npm run db:seed` | Imports dummy categories, products, and orders into PostgreSQL |
 | `npm run db:seed:auth` | Adds or refreshes the development customer login without resetting other data |
 | `npm run db:migrate` | Applies checked-in Prisma migrations to PostgreSQL |
@@ -65,9 +66,9 @@ The development-only customer credentials are **username:** `rabi`, **password:*
 Product reviews are available on product pages after a signed-in customer has a confirmed, shipped, delivered, or completed order for that product. Each customer can post one review per product. Reviews are stored and shown individually; product rating aggregates are not recalculated yet. Product UPC values are optional, unique 12-digit UPC-A codes with a verified check digit.
 
 Orders must belong to a signed-in customer. The database requires every order to reference a user.
-For an existing database with no Prisma migration history that still has the original schema, mark the baseline as applied once with `npx prisma migrate resolve --applied 20261018182000_init --schema backend/prisma/schema.prisma`, then run `npm run db:migrate`. The feature migration links orders to existing accounts by email and stops safely if any owner remains unknown; for known demo fixtures, run `npm run db:backfill:order-owners` first. If `db push` already synchronized the complete schema, including `Order.shippingAddress`, mark all three migrations as applied before running `npm run db:migrate`. `npm run db:reset` recreates the schema and seeds orders with owners; it deletes existing database contents.
+For an existing database with no Prisma migration history that still has the original schema, mark the baseline as applied once with `npx prisma migrate resolve --applied 20261018182000_init --schema backend/prisma/schema.prisma`, then run `npm run db:migrate`. The feature migration links orders to existing accounts by email and stops safely if any owner remains unknown; for known demo fixtures, run `npm run db:backfill:order-owners` first. If `db push` already synchronized the complete schema, including `Order.shippingAddress` and recurring subscription fields, mark all four migrations as applied before running `npm run db:migrate`. `npm run db:reset` recreates the schema and seeds orders with owners; it deletes existing database contents.
 
-Checkout redirects to Stripe Checkout for payment and shipping details. Configure Stripe test keys and a webhook signing secret in `backend/.env` for local testing; the backend does not receive or store card numbers or CVCs.
+Checkout redirects to Stripe Checkout for payment and shipping details. Customers can opt into a monthly subscription, with renewals charged by the backend worker. Configure Stripe test keys and a webhook signing secret in `backend/.env` for local testing; the backend does not receive or store card numbers or CVCs. Run `npm run billing:run --workspace=backend` to process due renewals manually.
 
 ---
 

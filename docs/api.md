@@ -158,6 +158,7 @@ Starts a Stripe-hosted payment session for the signed-in customer's cart. The ba
 - **Path**: `/api/orders/checkout-session`
 - **Headers**: `Content-Type: application/json`, `Authorization: Bearer <JWT>` (required)
 - Requires `STRIPE_SECRET_KEY` on the backend. The signed-in account supplies the customer name, email, and user ID.
+- Send `isSubscription: true` to opt into monthly renewal. Stripe saves the payment method for off-session use during this Checkout. Recurring orders receive the 10% subscription discount.
 - **Body**:
   ```json
   {
@@ -178,6 +179,14 @@ Starts a Stripe-hosted payment session for the signed-in customer's cart. The ba
   ```
 
 The order is saved with a pending status before redirecting to Stripe. Card details are collected by Stripe and are never sent to this API. Stripe webhook events confirm or fail the pending order. A completed checkout stores the collected shipping address on the order.
+
+### `GET /api/orders/subscriptions`
+
+Lists the signed-in customer's subscriptions and their status and next renewal date.
+
+### `DELETE /api/orders/subscriptions/:subscriptionId`
+
+Cancels an active or past-due subscription. The subscription is scoped to the signed-in customer; successful cancellation prevents future worker renewals.
 
 ### Verify a Checkout Session
 Retrieves the signed-in customer's order after Stripe redirects back to the storefront. The backend also checks Stripe directly, so the return page does not rely on a browser-supplied payment status.

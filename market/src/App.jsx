@@ -183,6 +183,7 @@ export default function App() {
   // Checkout & Customer Flow State
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [subscriptions, setSubscriptions] = useState([]);
   const [productReviews, setProductReviews] = useState([]);
   const [reviewEligibility, setReviewEligibility] = useState(null);
   const [reviewDraft, setReviewDraft] = useState({ rating: '5', title: '', body: '' });
@@ -191,6 +192,7 @@ export default function App() {
   const [authTab, setAuthTab] = useState('signup'); // 'signup' | 'signin' | 'authenticated'
   const [authFormData, setAuthFormData] = useState({ name: '', username: '', email: '', password: '' });
   const [showConfirmPrompt, setShowConfirmPrompt] = useState(false);
+  const [isSubscriptionSelected, setIsSubscriptionSelected] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
@@ -209,6 +211,17 @@ export default function App() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.token) {
+      setSubscriptions([]);
+      return;
+    }
+    fetch(`${API_BASE_URL}/orders/subscriptions`, { headers: { Authorization: `Bearer ${currentUser.token}` } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setSubscriptions(data?.data || []))
+      .catch(() => setSubscriptions([]));
+  }, [currentUser]);
 
   useEffect(() => {
     window.localStorage.setItem('marketplaceCart', JSON.stringify(cart));
@@ -239,6 +252,11 @@ export default function App() {
         if (!active) return;
         setConfirmedOrder(order);
         setCart([]);
+        setIsSubscriptionSelected(false);
+        fetch(`${API_BASE_URL}/orders/subscriptions`, { headers: { Authorization: `Bearer ${currentUser.token}` } })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => { if (data?.data) setSubscriptions(data.data); })
+          .catch(() => {});
         window.history.replaceState({}, '', '/checkout');
       })
       .catch((error) => {
@@ -494,6 +512,7 @@ export default function App() {
     setShowConfirmPrompt(false);
 
     const orderPayload = {
+      isSubscription: isSubscriptionSelected,
       items: cart.map((i) => ({
         productId: i.id,
         variant: i.chosenVariant,
@@ -517,6 +536,23 @@ export default function App() {
       showToast(error.message || 'Unable to reach the order service. Please try again.');
     } finally {
       setIsSubmittingOrder(false);
+    }
+  };
+
+  const handleCancelSubscription = async (subscriptionId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/orders/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not cancel the subscription.');
+      setSubscriptions((current) => current.map((subscription) => subscription.id === subscriptionId
+        ? { ...subscription, status: 'canceled', nextBillingAt: null }
+        : subscription));
+      showToast('Subscription canceled. No further renewals will be charged.');
+    } catch (error) {
+      showToast(error.message || 'Could not cancel the subscription.');
     }
   };
 
@@ -588,7 +624,9 @@ export default function App() {
   // Cart Calculations
   const cartTotals = useMemo(() => {
     const rawSubtotal = cart.reduce((sum, item) => sum + (item.originalPrice || item.price) * item.quantity, 0);
-    const effectiveSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const effectiveSubtotal = isSubscriptionSelected
+      ? cart.reduce((sum, item) => sum + (item.discountSelected ? item.price : Number((item.price * 0.9).toFixed(2))) * item.quantity, 0)
+      : cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const savings = Math.max(0, rawSubtotal - effectiveSubtotal);
     const tax = Number((effectiveSubtotal * 0.085).toFixed(2));
     const total = Number((effectiveSubtotal + tax).toFixed(2));
@@ -602,7 +640,7 @@ export default function App() {
       total,
       totalItems
     };
-  }, [cart]);
+  }, [cart, isSubscriptionSelected]);
 
   return (
     <div className="app-container">
@@ -1277,6 +1315,27 @@ export default function App() {
                         </div>
                       </div>
                     )}
+                    {currentUser && subscriptions.length > 0 && (
+                      <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
+                        <strong>My subscriptions</strong>
+                        {subscriptions.map((subscription) => (
+                          <div key={subscription.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginTop: '0.65rem', fontSize: '0.84rem' }}>
+                            <span>
+                              {subscription.status} · ${Number(subscription.amount).toFixed(2)}/month
+                              {subscription.nextBillingAt && ` · renews ${new Date(subscription.nextBillingAt).toLocaleDateString()}`}
+                            </span>
+                            {['active', 'past_due', 'needs_payment_method'].includes(subscription.status) && (
+                              <button
+                                style={{ background: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                onClick={() => handleCancelSubscription(subscription.id)}
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Step 2: Payment Method */}
@@ -1294,6 +1353,20 @@ export default function App() {
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5 }}>
                       Card details are entered on Stripe's secure checkout page. Stripe will also collect the shipping address.
                     </p>
+                    <label style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', marginTop: '1rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={isSubscriptionSelected}
+                        onChange={(event) => setIsSubscriptionSelected(event.target.checked)}
+                        style={{ marginTop: '0.25rem' }}
+                      />
+                      <span>
+                        <strong>Subscribe monthly and save 10%</strong>
+                        <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.84rem', lineHeight: 1.5, marginTop: '0.25rem' }}>
+                          The same items will renew monthly at the discounted price, plus estimated tax. You can cancel from your account.
+                        </span>
+                      </span>
+                    </label>
                   </div> : (
                     <div className="checkout-section-block">
                       <p style={{ color: 'var(--text-muted)' }}>Add an item to your cart before continuing to checkout.</p>
@@ -1315,7 +1388,7 @@ export default function App() {
                             Variant: {item.chosenVariant} (x{item.quantity})
                           </div>
                         </div>
-                        <span style={{ fontWeight: 700 }}>${(item.price * item.quantity).toFixed(2)}</span>
+                        <span style={{ fontWeight: 700 }}>${((isSubscriptionSelected && !item.discountSelected ? Number((item.price * 0.9).toFixed(2)) : item.price) * item.quantity).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -1341,7 +1414,7 @@ export default function App() {
                       <span style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>FREE</span>
                     </div>
                     <div className="price-breakdown-total">
-                      <span>Total Amount to Pay</span>
+                      <span>{isSubscriptionSelected ? 'Due today and monthly' : 'Total Amount to Pay'}</span>
                       <span>${cartTotals.total.toFixed(2)}</span>
                     </div>
                   </div>
@@ -1369,7 +1442,7 @@ export default function App() {
                   </svg>
                   <h3>Confirm Your Order</h3>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.75rem 0 1rem' }}>
-                    You are placing an order for <strong>${cartTotals.total.toFixed(2)}</strong> ({cartTotals.totalItems} item(s)).
+                    You are placing {isSubscriptionSelected ? 'a monthly subscription starting with an order for' : 'an order for'} <strong>${cartTotals.total.toFixed(2)}</strong> ({cartTotals.totalItems} item(s)).
                   </p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
                     You will be redirected to Stripe's secure page to enter payment and shipping details.

@@ -16,7 +16,9 @@
     "db:seed": "node prisma/seed.js",
     "db:seed:auth": "node prisma/seedAuthUser.js",
     "db:backfill:order-owners": "node prisma/backfillOrderOwners.js",
-    "db:reset": "prisma migrate reset --force"
+    "billing:run": "node src/workers/billSubscriptions.js",
+    "db:reset": "prisma migrate reset --force",
+    "resetdb": "npm run db:reset"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",

@@ -94,10 +94,11 @@ npm run db:seed
 ```
 
 ### 3. Reset Database (Wipe & Re-import Dummy Data)
-At any point, completely wipe existing tables and re-populate with fresh seed data:
+From `backend/`, completely wipe the configured database, reapply migrations, and run the configured seed:
 ```bash
-npm run db:reset
+npm run resetdb
 ```
+The same shortcut is available from the repository root. This deletes all data in the configured database.
 
 
 ---

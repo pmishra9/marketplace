@@ -50,6 +50,7 @@ model User {
   orders        Order[]
   reviews       Review[]
   savedPayments SavedPayment[]
+  subscriptions Subscription[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -83,6 +84,9 @@ model Order {
   paymentStatus  String      @default("authorized")
   cardLast4      String?
   isSubscription Boolean     @default(false)
+  subscriptionId String?
+  billingPeriod  String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   shippingAddress Json?
   receiptEmailed Boolean     @default(false)
   status         String      @default("confirmed")
@@ -90,6 +94,32 @@ model Order {
   reviews        Review[]
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+
+  @@index([subscriptionId, billingPeriod])
+  @@index([userId, createdAt])
+}
+
+model Subscription {
+  id                     String   @id @default(cuid())
+  userId                 String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  initialOrderId         String   @unique
+  status                 String   @default("pending")
+  interval               String   @default("month")
+  stripeCustomerId       String?
+  stripePaymentMethodId  String?
+  items                  Json
+  amount                 Float
+  currency               String   @default("usd")
+  nextBillingAt          DateTime?
+  billingAttempt         Int      @default(0)
+  lastPaymentIntentId    String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  orders                 Order[]
+
+  @@index([status, nextBillingAt])
+  @@index([userId, status])
 }
 
 model OrderItem {

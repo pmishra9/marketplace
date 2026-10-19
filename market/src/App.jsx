@@ -2,144 +2,6 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
 
-// Built-in initial catalog fallback
-const INITIAL_PRODUCTS = [
-  {
-    id: 'prod-001',
-    title: 'Aura Pro Wireless ANC Headphones',
-    brand: 'Aura',
-    description: 'Studio-grade acoustic sound with active noise cancellation, 40-hour battery life, and ultra-plush memory foam cushions.',
-    price: 299.99,
-    originalPrice: 349.99,
-    discountPercent: 14,
-    category: 'audio',
-    rating: 4.9,
-    reviewsCount: 342,
-    stock: 24,
-    badge: 'Best Seller',
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80',
-    featured: true,
-    variants: [
-      { id: 'matte-obsidian', name: 'Matte Obsidian', inStock: true },
-      { id: 'silver-platinum', name: 'Silver Platinum', inStock: true },
-      { id: 'midnight-navy', name: 'Midnight Navy', inStock: true }
-    ]
-  },
-  {
-    id: 'prod-002',
-    title: 'Titan Horizon Chrono Smartwatch',
-    brand: 'Titan',
-    description: 'Sapphire glass AMOLED display, titanium chassis, comprehensive biometric tracking and 14-day battery longevity.',
-    price: 389.00,
-    originalPrice: 429.00,
-    discountPercent: 9,
-    category: 'wearables',
-    rating: 4.8,
-    reviewsCount: 218,
-    stock: 15,
-    badge: 'Popular',
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80',
-    featured: true,
-    variants: [
-      { id: 'raw-titanium', name: 'Raw Titanium', inStock: true },
-      { id: 'stealth-dlc', name: 'Stealth DLC Black', inStock: true }
-    ]
-  },
-  {
-    id: 'prod-003',
-    title: 'Lumix Glow Minimalist Smart Lamp',
-    brand: 'Lumix',
-    description: 'Harmonious ambient lighting with touch dimmer, Qi wireless charging pad, and circadian rhythm automation.',
-    price: 119.50,
-    originalPrice: 139.00,
-    discountPercent: 14,
-    category: 'home',
-    rating: 4.7,
-    reviewsCount: 156,
-    stock: 42,
-    badge: 'New Arrival',
-    image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=800&q=80',
-    featured: false,
-    variants: [
-      { id: 'nordic-walnut', name: 'Nordic Walnut', inStock: true },
-      { id: 'alabaster-white', name: 'Alabaster White', inStock: true }
-    ]
-  },
-  {
-    id: 'prod-004',
-    title: 'Vertex 4K Ultra-Wide Mechanical Keyboard',
-    brand: 'Vertex',
-    description: 'Hot-swappable tactile switches, gasket-mounted dampening, aluminum body, and per-key RGB backlighting.',
-    price: 169.99,
-    originalPrice: 199.99,
-    discountPercent: 15,
-    category: 'electronics',
-    rating: 4.9,
-    reviewsCount: 489,
-    stock: 31,
-    badge: 'Staff Pick',
-    image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=800&q=80',
-    featured: true,
-    variants: [
-      { id: 'tactile-silent', name: 'Tactile Silent (Brown)', inStock: true },
-      { id: 'linear-speed', name: 'Linear Speed (Red)', inStock: true },
-      { id: 'clicky-crisp', name: 'Crisp Clicky (Blue)', inStock: true }
-    ]
-  },
-  {
-    id: 'prod-005',
-    title: 'Onyx Magnetic Leather Sleeve & Stand',
-    brand: 'Onyx',
-    description: 'Full-grain Italian leather protective case that folds into an ergonomic dual-angle laptop stand.',
-    price: 79.00,
-    originalPrice: 89.00,
-    discountPercent: 11,
-    category: 'accessories',
-    rating: 4.6,
-    reviewsCount: 88,
-    stock: 50,
-    badge: null,
-    image: 'https://images.unsplash.com/photo-1622434641406-a158123450f9?w=800&q=80',
-    featured: false,
-    variants: [
-      { id: 'cognac-saddle', name: 'Cognac Saddle', inStock: true },
-      { id: 'espresso-black', name: 'Espresso Black', inStock: true }
-    ]
-  },
-  {
-    id: 'prod-006',
-    title: 'Pulse 360 Portable Water-Resistant Speaker',
-    brand: 'Pulse',
-    description: 'Sub-bass radiator, omnidirectional 360 sound, IP67 waterproof rating, and daisy-chain stereo pairing.',
-    price: 149.00,
-    originalPrice: 179.00,
-    discountPercent: 17,
-    category: 'audio',
-    rating: 4.8,
-    reviewsCount: 275,
-    stock: 19,
-    badge: 'Top Rated',
-    image: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=800&q=80',
-    featured: false,
-    variants: [
-      { id: 'graphite-storm', name: 'Graphite Storm', inStock: true },
-      { id: 'arctic-white', name: 'Arctic White', inStock: true },
-      { id: 'forest-alpine', name: 'Forest Alpine', inStock: true }
-    ]
-  }
-];
-
-const CATEGORIES = [
-  { id: 'all', name: 'All Products' },
-  { id: 'electronics', name: 'Electronics' },
-  { id: 'audio', name: 'Audio & Sound' },
-  { id: 'wearables', name: 'Smart Wearables' },
-  { id: 'accessories', name: 'Accessories' },
-  { id: 'home', name: 'Smart Home' }
-];
-
-const BRANDS = ['all', 'Aura', 'Titan', 'Lumix', 'Vertex', 'Onyx', 'Pulse'];
-
 const slugify = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const productPath = (product) => `/products/${encodeURIComponent(product.id)}/${slugify(product.title)}`;
 
@@ -153,7 +15,11 @@ const parseRoute = (pathname) => {
 
 export default function App() {
   // Catalog State
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState('');
   const [route, setRoute] = useState(() => parseRoute(window.location.pathname));
   const lastNonCheckoutPath = useRef(window.location.pathname === '/checkout' ? '/' : window.location.pathname);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -282,16 +148,39 @@ export default function App() {
     navigate(lastNonCheckoutPath.current || '/', true);
   };
 
-  // Fetch live products from backend
+  // Load the catalog and filter options from the backend API.
   useEffect(() => {
-    fetch(`${API_BASE_URL}/products`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (json?.data?.length > 0) {
-          setProducts(json.data);
-        }
+    let cancelled = false;
+
+    const fetchCollection = async (path) => {
+      const response = await fetch(`${API_BASE_URL}${path}`);
+      const json = await response.json();
+      if (!response.ok || json?.success === false) {
+        throw new Error(json?.message || `Could not load ${path.slice(1)}.`);
+      }
+      return Array.isArray(json?.data) ? json.data : [];
+    };
+
+    Promise.all([
+      fetchCollection('/products'),
+      fetchCollection('/products/categories'),
+      fetchCollection('/products/brands')
+    ])
+      .then(([productData, categoryData, brandData]) => {
+        if (cancelled) return;
+        setProducts(productData);
+        setCategories(categoryData.filter((category) => category.id !== 'all'));
+        setBrands(brandData.filter(Boolean));
+        setCatalogError('');
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (!cancelled) setCatalogError(error.message || 'The catalog could not be loaded.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsCatalogLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -621,6 +510,9 @@ export default function App() {
     return list;
   }, [products, activeCategory, activeBrand, onlyDiscounted, searchQuery, sortBy]);
 
+  const categoryOptions = [{ id: 'all', name: 'All Products' }, ...categories];
+  const brandOptions = ['all', ...brands];
+
   // Cart Calculations
   const cartTotals = useMemo(() => {
     const rawSubtotal = cart.reduce((sum, item) => sum + (item.originalPrice || item.price) * item.quantity, 0);
@@ -757,7 +649,7 @@ export default function App() {
       <main className="catalog-section">
         {/* Category Pills Row */}
         <div className="category-pills-row">
-          {CATEGORIES.map((cat) => (
+          {categoryOptions.map((cat) => (
             <a
               key={cat.id}
               id={`category-pill-${cat.id}`}
@@ -780,7 +672,7 @@ export default function App() {
             {/* Brand Filter */}
             <div className="brand-pills-wrap">
               <span className="filters-group-label">Brand:</span>
-              {BRANDS.map((b) => (
+              {brandOptions.map((b) => (
                 <button
                   key={b}
                   id={`filter-brand-${b}`}
@@ -825,7 +717,16 @@ export default function App() {
         </div>
 
         {/* Product Grid View */}
-        {filteredProducts.length === 0 ? (
+        {isCatalogLoading ? (
+          <div className="empty-state" role="status">
+            <h3>Loading products…</h3>
+          </div>
+        ) : catalogError ? (
+          <div className="empty-state" role="alert">
+            <h3>Catalog unavailable</h3>
+            <p>{catalogError}</p>
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <div className="empty-state">
             <h3>No products found</h3>
             <p>Try resetting filters or adjusting your search query.</p>

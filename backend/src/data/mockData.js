@@ -8,6 +8,7 @@ export const categories = [
 ];
 
 export const brands = [
+  'Samsung',
   'Aura',
   'Titan',
   'Lumix',
@@ -138,6 +139,27 @@ export const products = [
       { id: 'graphite-storm', name: 'Graphite Storm', inStock: true },
       { id: 'arctic-white', name: 'Arctic White', inStock: true },
       { id: 'forest-alpine', name: 'Forest Alpine', inStock: true }
+    ]
+  },
+  {
+    id: 'prod-007',
+    title: 'Samsung 65" Crystal UHD 4K Smart TV',
+    brand: 'Samsung',
+    description: 'Breathtaking 4K UHD resolution powered by the Crystal Processor 4K, HDR, Motion Xcelerator, and Smart TV with built-in voice assistants.',
+    price: 599.99,
+    originalPrice: 999.99,
+    discountPercent: 40,
+    category: 'electronics',
+    rating: 4.8,
+    reviewsCount: 412,
+    stock: 18,
+    badge: 'Special Offer',
+    image: 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=800&q=80',
+    featured: true,
+    variants: [
+      { id: '55-inch', name: '55" Screen', inStock: true },
+      { id: '65-inch', name: '65" Screen', inStock: true },
+      { id: '75-inch', name: '75" Screen', inStock: true }
     ]
   }
 ];

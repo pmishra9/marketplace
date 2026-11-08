@@ -130,9 +130,17 @@ export const createCheckoutSession = async (req, res) => {
 
   let createdOrder;
   try {
-    const products = await prisma.product.findMany({
-      where: { id: { in: [...new Set(normalizedItems.map((item) => item.productId))] } }
-    });
+    let products = [];
+    try {
+      products = await prisma.product.findMany({
+        where: { id: { in: [...new Set(normalizedItems.map((item) => item.productId))] } }
+      });
+    } catch {
+      products = fallbackProducts.filter((p) => normalizedItems.some((i) => i.productId === p.id));
+    }
+    if (!products.length) {
+      products = fallbackProducts.filter((p) => normalizedItems.some((i) => i.productId === p.id));
+    }
     const productsById = new Map(products.map((product) => [product.id, product]));
     const pricedItems = [];
 
@@ -179,6 +187,76 @@ export const createCheckoutSession = async (req, res) => {
           product_data: { name: 'Estimated sales tax (8.5%)' }
         },
         quantity: 1
+      });
+    }
+
+    const isStripeEnabled = process.env.ENABLE_STRIPE === 'true' && Boolean(process.env.STRIPE_SECRET_KEY);
+
+    if (!isStripeEnabled) {
+      try {
+        createdOrder = await prisma.order.create({
+          data: {
+            id: orderId,
+            customerName: req.authUser.name || 'Valued Customer',
+            customerEmail: req.authUser.email,
+            userId: req.authUser.id,
+            subtotal: subtotalCents / 100,
+            discountAmount: discountCents / 100,
+            taxAmount: taxCents / 100,
+            totalAmount: totalCents / 100,
+            paymentMethod: 'Direct Checkout',
+            paymentProvider: 'direct',
+            paymentStatus: 'paid',
+            isSubscription,
+            receiptEmailed: false,
+            status: 'confirmed',
+            items: {
+              create: pricedItems.map((item) => ({
+                productId: item.productId,
+                variant: item.variant,
+                quantity: item.quantity,
+                price: item.unitPriceCents / 100
+              }))
+            }
+          },
+          include: { items: true }
+        });
+      } catch (dbErr) {
+        console.warn('Database order creation fallback:', dbErr.message);
+        createdOrder = {
+          id: orderId,
+          customerName: req.authUser.name || 'Valued Customer',
+          customerEmail: req.authUser.email,
+          userId: req.authUser.id,
+          subtotal: subtotalCents / 100,
+          discountAmount: discountCents / 100,
+          taxAmount: taxCents / 100,
+          totalAmount: totalCents / 100,
+          paymentMethod: 'Direct Checkout',
+          paymentProvider: 'direct',
+          paymentStatus: 'paid',
+          isSubscription,
+          receiptEmailed: false,
+          status: 'confirmed',
+          items: pricedItems.map((item) => ({
+            productId: item.productId,
+            variant: item.variant,
+            quantity: item.quantity,
+            price: item.unitPriceCents / 100
+          }))
+        };
+        fallbackOrders.unshift(createdOrder);
+      }
+
+      logReceiptEmail(createdOrder);
+      return res.status(201).json({
+        success: true,
+        message: 'Order confirmed successfully (Direct Checkout)',
+        data: {
+          orderId,
+          order: createdOrder,
+          directConfirm: true
+        }
       });
     }
 
@@ -332,6 +410,21 @@ const activateSubscriptionFromCheckout = async (order, session) => {
 };
 
 export const getCheckoutSessionOrder = async (req, res) => {
+  const isStripeEnabled = process.env.ENABLE_STRIPE === 'true' && Boolean(process.env.STRIPE_SECRET_KEY);
+  if (!isStripeEnabled || req.params.sessionId?.startsWith('ORD-')) {
+    try {
+      const order = await prisma.order.findFirst({
+        where: { id: req.params.sessionId, userId: req.authUser.id },
+        include: { items: true }
+      });
+      if (order) return res.json({ success: true, paymentStatus: 'paid', data: order });
+    } catch {
+      const order = fallbackOrders.find((o) => o.id === req.params.sessionId && o.userId === req.authUser.id);
+      if (order) return res.json({ success: true, paymentStatus: 'paid', data: order });
+    }
+    return res.status(404).json({ success: false, message: 'Order not found.' });
+  }
+
   try {
     const session = await stripeRequest(`/checkout/sessions/${encodeURIComponent(req.params.sessionId)}`, null, 'GET');
     if (session.metadata?.userId !== req.authUser.id) {

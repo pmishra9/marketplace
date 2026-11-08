@@ -17,6 +17,9 @@ const PORT = process.env.PORT || 4000;
 // Middleware
 app.use(cors({ origin: true, credentials: true }));
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }), async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return res.status(200).json({ received: true, note: 'Stripe payments are disabled.' });
+  }
   let event;
   try {
     event = verifyStripeWebhook(req.body, req.get('stripe-signature'));

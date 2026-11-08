@@ -417,10 +417,29 @@ export default function App() {
         body: JSON.stringify(orderPayload)
       });
       const data = await res.json();
-      if (!res.ok || !data.data?.checkoutUrl) {
+      if (!res.ok) {
         throw new Error(data.message || 'The order could not be placed. Please try again.');
       }
-      window.location.assign(data.data.checkoutUrl);
+      if (data.data?.checkoutUrl) {
+        window.location.assign(data.data.checkoutUrl);
+      } else if (data.data?.order || data.data?.orderId) {
+        const orderData = data.data.order || {
+          id: data.data.orderId,
+          customerName: currentUser?.name || 'Valued Customer',
+          customerEmail: currentUser?.email,
+          paymentMethod: 'Direct Checkout',
+          totalAmount: cartTotals.total,
+          taxAmount: cartTotals.tax,
+          discountAmount: cartTotals.discountTotal,
+          items: cart
+        };
+        setConfirmedOrder(orderData);
+        setCart([]);
+        setIsSubscriptionSelected(false);
+        showToast('Order confirmed successfully!');
+      } else {
+        throw new Error('Order details could not be retrieved.');
+      }
     } catch (error) {
       showToast(error.message || 'Unable to reach the order service. Please try again.');
     } finally {
@@ -1084,7 +1103,7 @@ export default function App() {
                   <div style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-main)' }}>Order Receipt Summary:</div>
                   <div className="price-breakdown-row">
                     <span>Payment Method:</span>
-                    <strong style={{ color: 'var(--text-main)' }}>{confirmedOrder.paymentMethod || 'Stripe Checkout'}{confirmedOrder.cardLast4 ? ` (ending in ${confirmedOrder.cardLast4})` : ''}</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>{confirmedOrder.paymentMethod || 'Direct Checkout'}{confirmedOrder.cardLast4 ? ` (ending in ${confirmedOrder.cardLast4})` : ''}</strong>
                   </div>
                   <div className="price-breakdown-row">
                     <span>Items Count:</span>
@@ -1247,12 +1266,12 @@ export default function App() {
 
                     <div className="saved-payment-card selected">
                       <div className="payment-card-left">
-                        <span className="card-brand-badge">STRIPE</span>
-                        <span>Secure card payment</span>
+                        <span className="card-brand-badge">DIRECT</span>
+                        <span>Direct Checkout (No card required)</span>
                       </div>
                     </div>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5 }}>
-                      Card details are entered on Stripe's secure checkout page. Stripe will also collect the shipping address.
+                      No credit card or payment provider needed. Your order will be placed and confirmed directly.
                     </p>
                     <label style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', marginTop: '1rem', cursor: 'pointer' }}>
                       <input
@@ -1346,7 +1365,7 @@ export default function App() {
                     You are placing {isSubscriptionSelected ? 'a monthly subscription starting with an order for' : 'an order for'} <strong>${cartTotals.total.toFixed(2)}</strong> ({cartTotals.totalItems} item(s)).
                   </p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
-                    You will be redirected to Stripe's secure page to enter payment and shipping details.
+                    Your order will be placed and confirmed immediately without redirecting to an external payment page.
                   </p>
                   <p style={{ fontSize: '0.82rem', color: 'var(--accent-emerald)' }}>
                     ✓ An itemized receipt will be generated for {currentUser?.email || 'your email'}.
@@ -1365,7 +1384,7 @@ export default function App() {
                       onClick={handleFinalOrderPlacement}
                       disabled={isSubmittingOrder}
                     >
-                      {isSubmittingOrder ? 'Opening Stripe Checkout...' : 'Continue to Stripe Checkout'}
+                      {isSubmittingOrder ? 'Placing Order...' : 'Confirm & Place Order'}
                     </button>
                   </div>
                 </div>
